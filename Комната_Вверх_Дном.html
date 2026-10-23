@@ -1,0 +1,2686 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Комната вверх дном — v7</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      background: rgba(0, 0, 10, 0.62);
+      z-index: 10;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow: auto;
+    }
+
+    .menu-screen {
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .menu-button {
+      display: block;
+      width: 340px;
+      margin: 8px auto;
+      padding: 10px 14px;
+      font-size: 16px;
+      color: #fff;
+      background: rgba(20, 30, 60, 0.85);
+      border: 1px solid rgba(120, 170, 255, 0.35);
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .menu-button:hover {
+      background: rgba(40, 60, 110, 0.9);
+    }
+
+    .small {
+      color: #bcd;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    #hud {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      color: #fff;
+      z-index: 5;
+      text-shadow: 0 1px 2px #000;
+      font-size: 14px;
+      pointer-events: none;
+      max-width: 600px;
+      line-height: 1.35;
+    }
+
+    #toast {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      background: rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      padding: 8px 14px;
+      z-index: 30;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      font-size: 16px;
+      text-shadow: 0 1px 2px #000;
+      text-align: center;
+    }
+
+    #win, #death {
+      position: fixed;
+      inset: 0;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      font-size: 34px;
+      pointer-events: none;
+      text-shadow: 0 2px 12px #000;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
+      line-height: 1.4;
+    }
+
+    #win {
+      color: #0f0;
+      background: rgba(0, 20, 0, 0.42);
+    }
+
+    #death {
+      color: #ff3355;
+      background: rgba(35, 0, 0, 0.45);
+    }
+
+    #editor-text {
+      width: 100%;
+      height: 340px;
+      background: #0a0f1a;
+      color: #cfe8ff;
+      border: 1px solid #345;
+      border-radius: 8px;
+      padding: 10px;
+      box-sizing: border-box;
+      font-family: monospace;
+      font-size: 12px;
+      margin-bottom: 12px;
+      resize: vertical;
+    }
+
+    #editor-msg {
+      margin-top: 8px;
+      color: #9fd8ff;
+      font-size: 14px;
+    }
+
+    kbd {
+      background: #222;
+      border: 1px solid #666;
+      border-radius: 4px;
+      padding: 0 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div id="menu-root" class="menu-screen">
+      <h1>Комната вверх дном v7</h1>
+      <p class="small">
+        <kbd>WASD</kbd> — движение, <kbd>Space</kbd> — прыжок, мышь — осмотр.<br>
+        <kbd>1</kbd> — пол,
+        <kbd>2</kbd> — потолок,
+        <kbd>3</kbd> — левая стена,
+        <kbd>4</kbd> — правая стена,
+        <kbd>5</kbd> — передняя стена,
+        <kbd>6</kbd> — задняя стена.<br>
+        <kbd>R</kbd> — рестарт уровня,
+        <kbd>Shift + R</kbd> — новая игра,
+        <kbd>M</kbd> — звук.<br>
+        Голубые зоны — чекпоинты. Красные зоны убивают. Жёлтые кнопки открывают двери.
+      </p>
+      <button class="menu-button" id="btn-continue">Продолжить</button>
+      <button class="menu-button" id="btn-new">Новая игра</button>
+      <button class="menu-button" id="btn-levels">Выбор уровня</button>
+      <button class="menu-button" id="btn-best">Лучшие времена</button>
+      <button class="menu-button" id="btn-editor">Редактор уровня (JSON)</button>
+      <button class="menu-button" id="btn-reset-progress">Сброс прогресса</button>
+      <button class="menu-button" id="btn-reset-records">Сброс рекордов</button>
+    </div>
+
+    <div id="menu-levels" class="menu-screen" style="display:none">
+      <h2>Выбор уровня</h2>
+      <div id="level-buttons"></div>
+      <button class="menu-button back-button">Назад</button>
+    </div>
+
+    <div id="menu-best" class="menu-screen" style="display:none">
+      <h2>Лучшие времена</h2>
+      <div id="best-list" style="margin-bottom:16px"></div>
+      <button class="menu-button back-button">Назад</button>
+    </div>
+
+    <div id="menu-editor" class="menu-screen" style="display:none">
+      <h2>Редактор уровня (JSON)</h2>
+      <p class="small">
+        Здесь можно редактировать текущий уровень в памяти браузера.
+        Изменения не сохраняются навсегда после перезагрузки страницы.
+        Скопируй JSON, чтобы вставить его в код навсегда.
+      </p>
+
+      <textarea id="editor-text"></textarea>
+
+      <button class="menu-button" id="btn-editor-load">
+        Загрузить текущий уровень в редактор
+      </button>
+
+      <button class="menu-button" id="btn-editor-apply">
+        Применить к текущему уровню
+      </button>
+
+      <button class="menu-button" id="btn-editor-copy">
+        Скопировать текущий уровень
+      </button>
+
+      <button class="menu-button" id="btn-editor-new">
+        Добавить новый пустой уровень
+      </button>
+
+      <button class="menu-button back-button">Назад</button>
+
+      <div id="editor-msg"></div>
+    </div>
+  </div>
+
+  <div id="hud"></div>
+  <div id="toast"></div>
+  <div id="win"></div>
+  <div id="death"></div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    const hud = document.getElementById('hud');
+    const toastEl = document.getElementById('toast');
+    const winEl = document.getElementById('win');
+    const deathEl = document.getElementById('death');
+    const overlay = document.getElementById('overlay');
+
+    // ---------- Сцена ----------
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x04060d);
+    scene.fog = new THREE.Fog(0x04060d, 18, 95);
+
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      innerWidth / innerHeight,
+      0.1,
+      320
+    );
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0x88bbff, 0x101022, 1.5));
+
+    const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+    sun.position.set(18, 26, 10);
+    scene.add(sun);
+
+    // ---------- Константы ----------
+    const radius = 0.45;
+    const eyeHeight = 0.35;
+    const speed = 6.4;
+    const gravityStrength = 26;
+    const jumpSpeed = 8.6;
+    const transitionDuration = 0.34;
+    const hazardPadding = 0.12;
+
+    const SAVE_KEY = 'upside-room-progress-v7';
+    const BEST_KEY = 'upside-room-best-times-v7';
+    const CAMPAIGN_KEY = 'upside-room-campaign-v7';
+    const TOTAL_BEST_KEY = 'upside-room-total-best-v7';
+
+    const GRAVITY_HELP =
+      '1 — пол, 2 — потолок, 3 — левая стена, 4 — правая стена, 5 — передняя стена, 6 — задняя стена';
+
+    // ---------- Глобальное состояние ----------
+    let levelRoom = { x: 10, y: 6, z: 10 };
+
+    let obstacles = [];
+    let hazards = [];
+    let hazardMeshes = [];
+    let platforms = [];
+
+    let buttons = [];
+    let doorsById = {};
+    let buttonMeshes = [];
+    let doorMeshes = [];
+    let doorTimers = {};
+    let doorTickState = {};
+
+    let checkpointList = [];
+    let checkpointMeshes = [];
+
+    let exitZone = null;
+    let currentExitMesh = null;
+
+    let levelGroup = new THREE.Group();
+    scene.add(levelGroup);
+
+    let currentLevelIndex = 0;
+    let currentLevelData = null;
+
+    let won = false;
+    let dead = false;
+
+    let nextLevelTimeout = null;
+    let deathTimeout = null;
+    let toastTimeout = null;
+
+    let levelTime = 0;
+    let checkpointTime = 0;
+
+    let currentCheckpoint = null;
+    let currentCheckpointId = 'start';
+    let checkpointButtonState = [];
+
+    let campaignTime = 0;
+    let campaignValid = false;
+    let totalBest = null;
+    let bestTimes = [];
+
+    let soundEnabled = true;
+    let audioCtx = null;
+
+    let groundedPlatform = null;
+    let lastGroundPlatform = null;
+
+    // ---------- Игрок ----------
+    let position = new THREE.Vector3();
+    let velocity = new THREE.Vector3();
+
+    let logicGravity = new THREE.Vector3(0, -1, 0);
+    let logicUp = new THREE.Vector3(0, 1, 0);
+
+    let baseForward = new THREE.Vector3(0, 0, -1);
+    let pitch = 0;
+    let grounded = false;
+
+    const transition = {
+      active: false,
+      t: 0,
+      startQuat: new THREE.Quaternion(),
+      targetQuat: new THREE.Quaternion(),
+      targetGravity: new THREE.Vector3(),
+      targetUp: new THREE.Vector3(),
+      targetBaseForward: new THREE.Vector3(),
+      targetPitch: 0
+    };
+
+    let queuedGravity = null;
+    const keys = new Set();
+
+    const gravityKeys = {
+      Digit1: new THREE.Vector3(0, -1, 0),
+      Digit2: new THREE.Vector3(0, 1, 0),
+      Digit3: new THREE.Vector3(-1, 0, 0),
+      Digit4: new THREE.Vector3(1, 0, 0),
+      Digit5: new THREE.Vector3(0, 0, -1),
+      Digit6: new THREE.Vector3(0, 0, 1)
+    };
+
+    // ---------- Уровни ----------
+    const LEVELS = [
+      {
+        name: 'Уровень 1 — Правая стена',
+        hint: 'Нажми 4, чтобы притянуться к правой стене, затем поднимись к зелёному порталу.',
+        room: { x: 10, y: 6, z: 10 },
+        roomColor: 0x151b2e,
+        spawn: [0, -6 + radius, 5],
+        forward: [0, 0, -1],
+        obstacles: [
+          { x: 0, y: -4.9, z: -5, sx: 6, sy: 2.2, sz: 2, color: 0x6b4df0 },
+          { x: -5, y: -2, z: 3, sx: 2, sy: 5, sz: 2, color: 0x2ec8ff }
+        ],
+        platforms: [],
+        hazards: [],
+        checkpoints: [],
+        buttons: [],
+        doors: [],
+        exitMesh: {
+          pos: [9.92, 0, 5],
+          size: [0.15, 5, 4],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [8.6, -2.5, 3.0],
+          max: [10, 2.5, 7.0]
+        }
+      },
+      {
+        name: 'Уровень 2 — Потолок',
+        hint: 'Нажми 2, чтобы упасть вверх. Доберись до зелёной зоны на потолке.',
+        room: { x: 9, y: 5, z: 9 },
+        roomColor: 0x101a26,
+        spawn: [-6, -5 + radius, -6],
+        forward: [1, 0, 0],
+        obstacles: [
+          { x: -2, y: -1, z: 2, sx: 2, sy: 6, sz: 2, color: 0x223355 },
+          { x: 3, y: -2, z: -3, sx: 2, sy: 4, sz: 2, color: 0x442255 }
+        ],
+        platforms: [],
+        hazards: [],
+        checkpoints: [],
+        buttons: [],
+        doors: [],
+        exitMesh: {
+          pos: [0, 4.92, 0],
+          size: [4, 0.15, 4],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [-2, 3.6, -2],
+          max: [2, 5, 2]
+        }
+      },
+      {
+        name: 'Уровень 3 — Потолок и передняя стена',
+        hint: 'Цепочка: нажми 2, пройди по потолку, затем нажми 5 и спустись по передней стене.',
+        room: { x: 12, y: 7, z: 12 },
+        roomColor: 0x171326,
+        spawn: [0, -7 + radius, 8],
+        forward: [0, 0, -1],
+        obstacles: [
+          { x: -5, y: -2, z: -2, sx: 2, sy: 10, sz: 2, color: 0x223355 },
+          { x: 5, y: 1, z: 3, sx: 2, sy: 8, sz: 2, color: 0x223355 },
+          { x: 0, y: 2, z: -4, sx: 6, sy: 2, sz: 2, color: 0x442255 }
+        ],
+        platforms: [],
+        hazards: [],
+        checkpoints: [],
+        buttons: [],
+        doors: [],
+        exitMesh: {
+          pos: [5, 2, -11.92],
+          size: [4, 3, 0.15],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [3, 0, -12],
+          max: [7, 4, -10.6]
+        }
+      },
+      {
+        name: 'Уровень 4 — Гравитационный колодец',
+        hint: 'Красные зоны убивают. Голубая зона на потолке — чекпоинт. Маршрут: потолок → 3 → левая стена.',
+        room: { x: 12, y: 7, z: 12 },
+        roomColor: 0x1a1020,
+        spawn: [0, -7 + radius, 9],
+        forward: [0, 0, -1],
+        obstacles: [
+          { x: 8, y: -3, z: -8, sx: 2, sy: 6, sz: 2, color: 0x334455 },
+          { x: -8, y: 3, z: 8, sx: 2, sy: 4, sz: 2, color: 0x334455 }
+        ],
+        platforms: [],
+        hazards: [
+          { x: 0, y: -1, z: 0, sx: 8, sy: 12, sz: 8 },
+          { x: 4, y: 5, z: 0, sx: 3, sy: 2, sz: 3 },
+          { x: -4, y: 4, z: 0, sx: 3, sy: 2, sz: 3 },
+          { x: -11.5, y: -4.5, z: 0, sx: 1, sy: 5, sz: 24 }
+        ],
+        checkpoints: [
+          {
+            id: 'l4-ceiling',
+            zone: { min: [-2, 6.2, 6], max: [2, 7, 10] },
+            spawn: [0, 6.55, 8],
+            forward: [0, 0, -1],
+            gravity: [0, 1, 0]
+          }
+        ],
+        buttons: [],
+        doors: [],
+        exitMesh: {
+          pos: [-11.92, 3, 0],
+          size: [0.15, 4, 4],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [-12, 1, -2],
+          max: [-10.6, 5, 2]
+        }
+      },
+      {
+        name: 'Уровень 5 — Вертикальный лабиринт',
+        hint: 'Найди жёлтую кнопку на потолке, чтобы открыть выход. Затем 5 → передняя стена → вниз к порталу.',
+        room: { x: 14, y: 8, z: 14 },
+        roomColor: 0x0d1a1a,
+        spawn: [0, -8 + radius, 10],
+        forward: [0, 0, -1],
+        obstacles: [
+          { x: -10, y: -4, z: 10, sx: 2, sy: 6, sz: 2, color: 0x223344 },
+          { x: 10, y: -2, z: -10, sx: 2, sy: 8, sz: 2, color: 0x223344 }
+        ],
+        platforms: [],
+        hazards: [
+          { x: 0, y: 0, z: 0, sx: 6, sy: 16, sz: 6 },
+          { x: 12, y: 7.5, z: 0, sx: 2, sy: 2, sz: 10 },
+          { x: 0, y: -4, z: -13.5, sx: 28, sy: 8, sz: 1 },
+          { x: 13.5, y: -4, z: -7, sx: 1, sy: 8, sz: 14 }
+        ],
+        checkpoints: [
+          {
+            id: 'l5-ceiling',
+            zone: { min: [10, 7.2, 8], max: [14, 8, 12] },
+            spawn: [12, 7.55, 10],
+            forward: [-1, 0, 0],
+            gravity: [0, 1, 0]
+          },
+          {
+            id: 'l5-front',
+            zone: { min: [8, 5, -14], max: [12, 7, -12.6] },
+            spawn: [10, 6, -13.55],
+            forward: [0, -1, 0],
+            gravity: [0, 0, -1]
+          }
+        ],
+        buttons: [
+          {
+            id: 'l5-button',
+            opens: 'l5-exit-door',
+            zone: { min: [11, 7.2, 7], max: [14, 8, 11] },
+            mesh: { pos: [12.5, 7.92, 9], size: [3, 0.18, 4], color: 0xffcc00 }
+          }
+        ],
+        doors: [
+          {
+            id: 'l5-exit-door',
+            mesh: { pos: [10, 4, -13.8], size: [4.6, 4.6, 0.25], color: 0xff8844 }
+          }
+        ],
+        exitLocked: true,
+        lockDoorId: 'l5-exit-door',
+        exitMesh: {
+          pos: [10, 4, -13.92],
+          size: [4, 4, 0.15],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [8, 2, -14],
+          max: [12, 6, -12.6]
+        }
+      },
+      {
+        name: 'Уровень 6 — Спринт за дверью',
+        hint: 'Доберись до голубого чекпоинта на потолке, затем нажми жёлтую кнопку и быстро жми 5. Дверь открыта 3 секунды.',
+        room: { x: 14, y: 8, z: 14 },
+        roomColor: 0x14101d,
+        spawn: [0, -8 + radius, 10],
+        forward: [0, 0, -1],
+        obstacles: [
+          { x: -11, y: -3, z: 11, sx: 2, sy: 6, sz: 2, color: 0x332244 },
+          { x: 11, y: -1, z: -11, sx: 2, sy: 8, sz: 2, color: 0x334422 }
+        ],
+        platforms: [],
+        hazards: [
+          { x: 0, y: 0, z: 0, sx: 6, sy: 16, sz: 6 },
+          { x: 10, y: 7.5, z: -2, sx: 2, sy: 2, sz: 6 },
+          { x: 0, y: -4, z: -13.5, sx: 28, sy: 8, sz: 1 },
+          { x: 13.5, y: -4, z: -7, sx: 1, sy: 8, sz: 14 }
+        ],
+        checkpoints: [
+          {
+            id: 'l6-ceiling',
+            zone: { min: [10, 7.2, 4], max: [14, 8, 8] },
+            spawn: [12, 7.55, 6],
+            forward: [-1, 0, 0],
+            gravity: [0, 1, 0]
+          }
+        ],
+        buttons: [
+          {
+            id: 'l6-button',
+            opens: 'l6-door',
+            timed: 3,
+            zone: { min: [8, 7.2, -12], max: [12, 8, -8] },
+            mesh: { pos: [10, 7.92, -10], size: [3, 0.18, 4], color: 0xffcc00 }
+          }
+        ],
+        doors: [
+          {
+            id: 'l6-door',
+            mesh: { pos: [10, 6, -13.8], size: [4.6, 4.6, 0.25], color: 0xff8844 }
+          }
+        ],
+        exitLocked: true,
+        lockDoorId: 'l6-door',
+        exitMesh: {
+          pos: [10, 6, -13.92],
+          size: [4, 4, 0.15],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [8, 4, -14],
+          max: [12, 8, -12.6]
+        }
+      },
+      {
+        name: 'Уровень 7 — Платформа и двойной спринт',
+        hint: 'Платформа перевезёт через красный пол. Нажми первую кнопку, затем вторую, затем быстро уходи в выход.',
+        room: { x: 16, y: 8, z: 16 },
+        roomColor: 0x121826,
+        spawn: [0, -8 + radius, 12],
+        forward: [0, 0, -1],
+        obstacles: [],
+        platforms: [
+          {
+            x: 0,
+            y: -7.3,
+            z: 0,
+            sx: 4,
+            sy: 0.5,
+            sz: 4,
+            axis: 'z',
+            amp: 6,
+            speed: 1.1,
+            phase: Math.PI / 2,
+            color: 0x7755ff
+          }
+        ],
+        hazards: [
+          { x: 0, y: -7.8, z: 0, sx: 32, sy: 0.6, sz: 8 },
+          { x: 0, y: -4, z: -15.5, sx: 32, sy: 8, sz: 1 }
+        ],
+        checkpoints: [
+          {
+            id: 'l7-after-platform',
+            zone: { min: [-2, -8, -12], max: [2, -7, -8] },
+            spawn: [0, -7.55, -10],
+            forward: [0, 0, -1],
+            gravity: [0, -1, 0]
+          }
+        ],
+        buttons: [
+          {
+            id: 'l7-btn1',
+            opens: 'l7-door1',
+            timed: 5,
+            zone: { min: [8, 7.2, -2], max: [12, 8, 2] },
+            mesh: { pos: [10, 7.92, 0], size: [3, 0.18, 4], color: 0xffcc00 }
+          },
+          {
+            id: 'l7-btn2',
+            opens: 'l7-door2',
+            timed: 2.5,
+            zone: { min: [-2, 7.2, -12], max: [2, 8, -8] },
+            mesh: { pos: [0, 7.92, -10], size: [3, 0.18, 4], color: 0xffcc00 }
+          }
+        ],
+        doors: [
+          {
+            id: 'l7-door1',
+            mesh: { pos: [-6, 6, -15.8], size: [4, 4, 0.25], color: 0xff8844 }
+          },
+          {
+            id: 'l7-door2',
+            mesh: { pos: [0, 6, -15.8], size: [4, 4, 0.25], color: 0xff5555 }
+          }
+        ],
+        requiredDoorIds: ['l7-door1', 'l7-door2'],
+        exitMesh: {
+          pos: [0, 6, -15.92],
+          size: [4, 4, 0.15],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [-2, 4, -16],
+          max: [2, 8, -14.6]
+        }
+      },
+      {
+        name: 'Уровень 8 — Двойная платформа',
+        hint: 'Две платформы через красный пол. Затем потолок и левая стена. Не спускайся слишком низко на левой стене.',
+        room: { x: 16, y: 8, z: 16 },
+        roomColor: 0x101826,
+        spawn: [0, -8 + radius, 12],
+        forward: [0, 0, -1],
+        obstacles: [],
+        platforms: [
+          {
+            x: -2,
+            y: -7.3,
+            z: 6,
+            sx: 4,
+            sy: 0.5,
+            sz: 4,
+            axis: 'z',
+            amp: 6,
+            speed: 1.0,
+            phase: Math.PI / 2,
+            color: 0x7755ff
+          },
+          {
+            x: 2,
+            y: -7.3,
+            z: -6,
+            sx: 4,
+            sy: 0.5,
+            sz: 4,
+            axis: 'z',
+            amp: 6,
+            speed: 1.2,
+            phase: Math.PI / 2,
+            color: 0x55aaff
+          }
+        ],
+        hazards: [
+          { x: 0, y: -7.8, z: 0, sx: 32, sy: 0.6, sz: 20 },
+          { x: -15.5, y: -4, z: 0, sx: 1, sy: 8, sz: 32 },
+          { x: 0, y: 7.5, z: 0, sx: 6, sy: 2, sz: 6 }
+        ],
+        checkpoints: [
+          {
+            id: 'l8-after-platforms',
+            zone: { min: [-2, -8, -14], max: [2, -7, -10] },
+            spawn: [0, -7.55, -12],
+            forward: [0, 0, -1],
+            gravity: [0, -1, 0]
+          }
+        ],
+        buttons: [],
+        doors: [],
+        exitMesh: {
+          pos: [-15.92, 6, 0],
+          size: [0.15, 4, 4],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [-16, 4, -2],
+          max: [-14.6, 8, 2]
+        }
+      },
+      {
+        name: 'Уровень 9 — Таймер и потолок',
+        hint: 'Платформа через красный пол. Чекпоинт за ней. На потолке нажми кнопку и быстро жми 5 к выходу.',
+        room: { x: 18, y: 8, z: 18 },
+        roomColor: 0x181026,
+        spawn: [0, -8 + radius, 12],
+        forward: [0, 0, -1],
+        obstacles: [],
+        platforms: [
+          {
+            x: 0,
+            y: -7.3,
+            z: 2,
+            sx: 4,
+            sy: 0.5,
+            sz: 4,
+            axis: 'z',
+            amp: 10,
+            speed: 1.0,
+            phase: Math.PI / 2,
+            color: 0x7755ff
+          }
+        ],
+        hazards: [
+          { x: 0, y: -7.8, z: 0, sx: 36, sy: 0.6, sz: 12 },
+          { x: 0, y: -4, z: -17.5, sx: 36, sy: 8, sz: 1 },
+          { x: 4, y: 7.5, z: -8, sx: 2, sy: 2, sz: 8 },
+          { x: 12, y: 7.5, z: -2, sx: 2, sy: 2, sz: 6 }
+        ],
+        checkpoints: [
+          {
+            id: 'l9-after-platform',
+            zone: { min: [-2, -8, -14], max: [2, -7, -10] },
+            spawn: [0, -7.55, -12],
+            forward: [0, 0, -1],
+            gravity: [0, -1, 0]
+          }
+        ],
+        buttons: [
+          {
+            id: 'l9-btn',
+            opens: 'l9-door',
+            timed: 4,
+            zone: { min: [6, 7.2, -10], max: [10, 8, -6] },
+            mesh: { pos: [8, 7.92, -8], size: [3, 0.18, 4], color: 0xffcc00 }
+          }
+        ],
+        doors: [
+          {
+            id: 'l9-door',
+            mesh: { pos: [8, 6, -17.8], size: [4, 4, 0.25], color: 0xff8844 }
+          }
+        ],
+        lockDoorId: 'l9-door',
+        exitMesh: {
+          pos: [8, 6, -17.92],
+          size: [4, 4, 0.15],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [6, 4, -18],
+          max: [10, 8, -16.6]
+        }
+      },
+      {
+        name: 'Уровень 10 — Гравитационный шторм',
+        hint: 'Финал: платформа, чекпоинт, потолок, две временные кнопки. Двери должны быть открыты одновременно.',
+        room: { x: 20, y: 9, z: 20 },
+        roomColor: 0x0f1020,
+        spawn: [0, -9 + radius, 16],
+        forward: [0, 0, -1],
+        obstacles: [],
+        platforms: [
+          {
+            x: 0,
+            y: -8.3,
+            z: 2,
+            sx: 4,
+            sy: 0.5,
+            sz: 4,
+            axis: 'z',
+            amp: 12,
+            speed: 0.95,
+            phase: Math.PI / 2,
+            color: 0xff55ff
+          }
+        ],
+        hazards: [
+          { x: 0, y: -8.8, z: 0, sx: 40, sy: 0.6, sz: 16 },
+          { x: 0, y: 0, z: 0, sx: 8, sy: 18, sz: 8 },
+          { x: 6, y: 8, z: -11, sx: 2, sy: 2, sz: 6 },
+          { x: -4, y: 8, z: -13, sx: 2, sy: 2, sz: 6 },
+          { x: 0, y: -4, z: -19.5, sx: 40, sy: 8, sz: 1 }
+        ],
+        checkpoints: [
+          {
+            id: 'l10-after-platform',
+            zone: { min: [-2, -9, -16], max: [2, -8, -12] },
+            spawn: [0, -8.55, -14],
+            forward: [0, 0, -1],
+            gravity: [0, -1, 0]
+          }
+        ],
+        buttons: [
+          {
+            id: 'l10-btn1',
+            opens: 'l10-door1',
+            timed: 5,
+            zone: { min: [10, 8.2, -10], max: [14, 9, -6] },
+            mesh: { pos: [12, 8.92, -8], size: [3, 0.18, 4], color: 0xffcc00 }
+          },
+          {
+            id: 'l10-btn2',
+            opens: 'l10-door2',
+            timed: 2.5,
+            zone: { min: [-2, 8.2, -16], max: [2, 9, -12] },
+            mesh: { pos: [0, 8.92, -14], size: [3, 0.18, 4], color: 0xffcc00 }
+          }
+        ],
+        doors: [
+          {
+            id: 'l10-door1',
+            mesh: { pos: [-6, 7, -19.8], size: [4, 4, 0.25], color: 0xff8844 }
+          },
+          {
+            id: 'l10-door2',
+            mesh: { pos: [0, 7, -19.8], size: [4, 4, 0.25], color: 0xff5555 }
+          }
+        ],
+        requiredDoorIds: ['l10-door1', 'l10-door2'],
+        exitMesh: {
+          pos: [0, 7, -19.92],
+          size: [4, 4, 0.15],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [-2, 5, -20],
+          max: [2, 9, -18.6]
+        }
+      }
+    ];
+
+    // ---------- Меню ----------
+    function showMenu(screen) {
+      overlay.style.display = 'flex';
+      winEl.style.display = 'none';
+      deathEl.style.display = 'none';
+
+      document.querySelectorAll('.menu-screen').forEach((s) => {
+        s.style.display = 'none';
+      });
+
+      const el = document.getElementById(`menu-${screen}`);
+      if (el) el.style.display = 'block';
+
+      if (screen === 'levels') buildLevelButtons();
+      if (screen === 'best') updateBestList();
+    }
+
+    function hideMenu() {
+      overlay.style.display = 'none';
+    }
+
+    function buildLevelButtons() {
+      const container = document.getElementById('level-buttons');
+      container.innerHTML = '';
+
+      LEVELS.forEach((lv, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'menu-button';
+        btn.innerHTML = `
+          ${i + 1}. ${lv.name}<br>
+          <small>Лучшее: ${formatTime(bestTimes[i])}</small>
+        `;
+        btn.addEventListener('click', () => {
+          ensureAudio();
+          playClick();
+
+          campaignValid = false;
+          campaignTime = 0;
+          saveCampaign();
+
+          loadLevel(i);
+          renderer.domElement.requestPointerLock();
+        });
+
+        container.appendChild(btn);
+      });
+    }
+
+    function updateBestList() {
+      const el = document.getElementById('best-list');
+
+      let html = LEVELS
+        .map((lv, i) => {
+          return `<div>${i + 1}. ${lv.name}: <b>${formatTime(bestTimes[i])}</b></div>`;
+        })
+        .join('');
+
+      html += `<br><div><b>Общий рекорд кампании: ${formatTime(totalBest)}</b></div>`;
+      html += `<div class="small">Общий рекорд засчитывается только при запуске через «Новая игра».</div>`;
+
+      el.innerHTML = html;
+    }
+
+    document.getElementById('btn-continue').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+      renderer.domElement.requestPointerLock();
+    });
+
+    document.getElementById('btn-new').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+
+      campaignValid = true;
+      campaignTime = 0;
+      saveCampaign();
+
+      loadLevel(0);
+      renderer.domElement.requestPointerLock();
+    });
+
+    document.getElementById('btn-levels').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+      showMenu('levels');
+    });
+
+    document.getElementById('btn-best').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+      showMenu('best');
+    });
+
+    document.getElementById('btn-reset-progress').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+
+      try {
+        localStorage.removeItem(SAVE_KEY);
+        localStorage.removeItem(CAMPAIGN_KEY);
+      } catch (e) {}
+
+      campaignValid = false;
+      campaignTime = 0;
+
+      loadLevel(0);
+      showMenu('root');
+      showToast('Прогресс сброшен');
+    });
+
+    document.getElementById('btn-reset-records').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+
+      try {
+        localStorage.removeItem(BEST_KEY);
+        localStorage.removeItem(TOTAL_BEST_KEY);
+      } catch (e) {}
+
+      bestTimes = loadBestTimes();
+      totalBest = loadTotalBest();
+
+      showMenu('best');
+      showToast('Рекорды сброшены');
+    });
+
+    document.querySelectorAll('.back-button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        ensureAudio();
+        playClick();
+        showMenu('root');
+      });
+    });
+
+    // ---------- Звук ----------
+    function ensureAudio() {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) audioCtx = new Ctx();
+      }
+
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playTone(freq = 440, dur = 0.1, type = 'sine', vol = 0.05, freqEnd = null) {
+      if (!soundEnabled || !audioCtx) return;
+
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+
+      if (freqEnd != null) {
+        osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd, 1), t + dur);
+      }
+
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(t);
+      osc.stop(t + dur + 0.03);
+    }
+
+    function playClick() {
+      playTone(520, 0.06, 'square', 0.03);
+    }
+
+    function playCheckpoint() {
+      playTone(650, 0.08, 'sine', 0.06);
+      setTimeout(() => playTone(950, 0.12, 'sine', 0.06), 70);
+    }
+
+    function playButton() {
+      playTone(760, 0.08, 'triangle', 0.06);
+    }
+
+    function playDoorOpen() {
+      playTone(300, 0.18, 'sawtooth', 0.04, 650);
+    }
+
+    function playDoorClose() {
+      playTone(520, 0.18, 'sawtooth', 0.04, 170);
+    }
+
+    function playDeath() {
+      playTone(220, 0.35, 'sawtooth', 0.08, 55);
+    }
+
+    function playWin() {
+      [523, 659, 784, 1046].forEach((f, i) => {
+        setTimeout(() => playTone(f, 0.12, 'triangle', 0.06), i * 90);
+      });
+    }
+
+    function playTick(urgent = false) {
+      playTone(urgent ? 1350 : 950, 0.04, 'square', 0.03);
+    }
+
+    addEventListener('pointerdown', ensureAudio);
+
+    // ---------- Утилиты ----------
+    function disposeGroup(group) {
+      group.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      });
+
+      group.clear();
+    }
+
+    function projectOnPlane(v, normal) {
+      return v.clone().sub(normal.clone().multiplyScalar(v.dot(normal)));
+    }
+
+    function insideBox(p, box) {
+      return (
+        p.x > box.min.x &&
+        p.x < box.max.x &&
+        p.y > box.min.y &&
+        p.y < box.max.y &&
+        p.z > box.min.z &&
+        p.z < box.max.z
+      );
+    }
+
+    function formatTime(t) {
+      if (t == null || !isFinite(t)) return '--:--.--';
+
+      const m = Math.floor(t / 60);
+      const s = Math.floor(t % 60);
+      const cs = Math.floor((t * 100) % 100);
+
+      return `${m}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+    }
+
+    function showToast(text) {
+      toastEl.textContent = text;
+      toastEl.style.opacity = '1';
+
+      if (toastTimeout) clearTimeout(toastTimeout);
+
+      toastTimeout = setTimeout(() => {
+        toastEl.style.opacity = '0';
+      }, 1800);
+    }
+
+    function gravityNameFor(g) {
+      if (g.y < -0.9) return 'пол';
+      if (g.y > 0.9) return 'потолок';
+      if (g.x < -0.9) return 'левая стена';
+      if (g.x > 0.9) return 'правая стена';
+      if (g.z < -0.9) return 'передняя стена';
+      if (g.z > 0.9) return 'задняя стена';
+      return '???';
+    }
+
+    function currentGravityName() {
+      const g = transition.active ? transition.targetGravity : logicGravity;
+      const suffix = transition.active ? ' (переключение)' : '';
+      return gravityNameFor(g) + suffix;
+    }
+
+    // ---------- Сохранение ----------
+    function saveProgress(levelIndex) {
+      try {
+        localStorage.setItem(SAVE_KEY, String(levelIndex));
+      } catch (e) {}
+    }
+
+    function loadProgress() {
+      try {
+        const v = Number(localStorage.getItem(SAVE_KEY));
+        if (Number.isInteger(v) && v >= 0 && v < LEVELS.length) {
+          return v;
+        }
+      } catch (e) {}
+
+      return 0;
+    }
+
+    function loadBestTimes() {
+      let arr = [];
+
+      try {
+        const raw = localStorage.getItem(BEST_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) arr = parsed;
+        }
+      } catch (e) {}
+
+      return LEVELS.map((_, i) => {
+        const v = arr[i];
+        if (typeof v === 'number' && isFinite(v) && v >= 0) return v;
+        return null;
+      });
+    }
+
+    function saveBestTimes() {
+      try {
+        localStorage.setItem(BEST_KEY, JSON.stringify(bestTimes));
+      } catch (e) {}
+    }
+
+    function loadTotalBest() {
+      try {
+        const v = Number(localStorage.getItem(TOTAL_BEST_KEY));
+        if (isFinite(v) && v >= 0) return v;
+      } catch (e) {}
+
+      return null;
+    }
+
+    function saveTotalBest(v) {
+      try {
+        localStorage.setItem(TOTAL_BEST_KEY, String(v));
+      } catch (e) {}
+    }
+
+    function saveCampaign() {
+      try {
+        localStorage.setItem(
+          CAMPAIGN_KEY,
+          JSON.stringify({
+            time: campaignTime,
+            valid: campaignValid,
+            level: currentLevelIndex
+          })
+        );
+      } catch (e) {}
+    }
+
+    function loadCampaign() {
+      try {
+        const raw = localStorage.getItem(CAMPAIGN_KEY);
+        if (!raw) return;
+
+        const obj = JSON.parse(raw);
+
+        if (typeof obj.time === 'number' && isFinite(obj.time) && obj.time >= 0) {
+          campaignTime = obj.time;
+        }
+
+        campaignValid = !!obj.valid;
+      } catch (e) {}
+    }
+
+    // ---------- HUD ----------
+    function getRequiredDoorIds() {
+      if (!currentLevelData) return [];
+
+      if (Array.isArray(currentLevelData.requiredDoorIds)) {
+        return currentLevelData.requiredDoorIds;
+      }
+
+      if (currentLevelData.lockDoorId) {
+        return [currentLevelData.lockDoorId];
+      }
+
+      return [];
+    }
+
+    function isExitLocked() {
+      const ids = getRequiredDoorIds();
+      if (ids.length === 0) return false;
+
+      return ids.some((id) => {
+        const d = doorsById[id];
+        return !d || !d.open;
+      });
+    }
+
+    function getLockText() {
+      const ids = getRequiredDoorIds();
+
+      if (ids.length === 0) {
+        return '<span style="color:#7cff9b">Выход открыт</span>';
+      }
+
+      let minTimer = null;
+
+      for (const id of ids) {
+        if (doorTimers[id] > 0) {
+          minTimer = minTimer == null ? doorTimers[id] : Math.min(minTimer, doorTimers[id]);
+        }
+      }
+
+      if (minTimer != null) {
+        return `<span style="color:#7cff9b">Двери: ${minTimer.toFixed(1)} с</span>`;
+      }
+
+      const openCount = ids.filter((id) => doorsById[id] && doorsById[id].open).length;
+
+      if (openCount === ids.length) {
+        return '<span style="color:#7cff9b">Все двери открыты</span>';
+      }
+
+      return `<span style="color:#ff9966">Двери закрыты: ${openCount}/${ids.length}</span>`;
+    }
+
+    function updateHud() {
+      if (!currentLevelData) return;
+
+      const best = bestTimes[currentLevelIndex];
+
+      let campaignLine = '';
+
+      if (campaignValid) {
+        const runTime = campaignTime + levelTime;
+        campaignLine = `Кампания: ${formatTime(runTime)} | Общий рекорд: ${formatTime(totalBest)}<br>`;
+      }
+
+      hud.innerHTML = `
+        <b>${currentLevelData.name}</b><br>
+        Уровень ${currentLevelIndex + 1}/${LEVELS.length}<br>
+        Гравитация: ${currentGravityName()}<br>
+        Время: ${formatTime(levelTime)} | Лучшее: ${best == null ? '—' : formatTime(best)}<br>
+        ${campaignLine}
+        ${getLockText()}<br>
+        ${currentLevelData.hint}<br>
+        <small>${GRAVITY_HELP}<br>R — рестарт, Shift+R — новая игра, M — звук</small>
+      `;
+    }
+
+    // ---------- Платформы ----------
+    function updatePlatformBounds(p) {
+      p.min.set(
+        p.mesh.position.x - p.size.x / 2,
+        p.mesh.position.y - p.size.y / 2,
+        p.mesh.position.z - p.size.z / 2
+      );
+
+      p.max.set(
+        p.mesh.position.x + p.size.x / 2,
+        p.mesh.position.y + p.size.y / 2,
+        p.mesh.position.z + p.size.z / 2
+      );
+    }
+
+    function addPlatformToLevel(data) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(data.sx, data.sy, data.sz),
+        new THREE.MeshStandardMaterial({
+          color: data.color || 0x6b4df0,
+          roughness: 0.4,
+          metalness: 0.35,
+          emissive: 0x110022
+        })
+      );
+
+      mesh.position.set(data.x, data.y, data.z);
+      levelGroup.add(mesh);
+
+      const axis = new THREE.Vector3(
+        data.axis === 'x' ? 1 : 0,
+        data.axis === 'y' ? 1 : 0,
+        data.axis === 'z' ? 1 : 0
+      );
+
+      const p = {
+        base: new THREE.Vector3(data.x, data.y, data.z),
+        axis,
+        amp: data.amp || 0,
+        speed: data.speed || 1,
+        t: data.phase || 0,
+        size: new THREE.Vector3(data.sx, data.sy, data.sz),
+        mesh,
+        delta: new THREE.Vector3(),
+        min: new THREE.Vector3(),
+        max: new THREE.Vector3()
+      };
+
+      updatePlatformBounds(p);
+      platforms.push(p);
+    }
+
+    function updatePlatforms(dt) {
+      for (const p of platforms) {
+        p.t += dt * p.speed;
+
+        const old = p.mesh.position.clone();
+        const offset = Math.sin(p.t) * p.amp;
+
+        p.mesh.position
+          .copy(p.base)
+          .add(p.axis.clone().multiplyScalar(offset));
+
+        p.delta.copy(p.mesh.position).sub(old);
+
+        updatePlatformBounds(p);
+      }
+    }
+
+    // ---------- Построение уровня ----------
+    function addBoxToLevel(x, y, z, sx, sy, sz, color) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(sx, sy, sz),
+        new THREE.MeshStandardMaterial({
+          color,
+          roughness: 0.65,
+          metalness: 0.2
+        })
+      );
+
+      mesh.position.set(x, y, z);
+      levelGroup.add(mesh);
+
+      obstacles.push({
+        min: new THREE.Vector3(x - sx / 2, y - sy / 2, z - sz / 2),
+        max: new THREE.Vector3(x + sx / 2, y + sy / 2, z + sz / 2)
+      });
+    }
+
+    function addHazardToLevel(x, y, z, sx, sy, sz) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(sx, sy, sz),
+        new THREE.MeshBasicMaterial({
+          color: 0xff2244,
+          transparent: true,
+          opacity: 0.42
+        })
+      );
+
+      mesh.position.set(x, y, z);
+      levelGroup.add(mesh);
+
+      hazards.push({
+        min: new THREE.Vector3(x - sx / 2, y - sy / 2, z - sz / 2),
+        max: new THREE.Vector3(x + sx / 2, y + sy / 2, z + sz / 2)
+      });
+
+      hazardMeshes.push(mesh);
+    }
+
+    function makeDust() {
+      const geo = new THREE.BufferGeometry();
+      const count = 400;
+      const arr = new Float32Array(count * 3);
+
+      for (let i = 0; i < count; i++) {
+        arr[i * 3 + 0] = THREE.MathUtils.randFloatSpread(levelRoom.x * 2);
+        arr[i * 3 + 1] = THREE.MathUtils.randFloatSpread(levelRoom.y * 2);
+        arr[i * 3 + 2] = THREE.MathUtils.randFloatSpread(levelRoom.z * 2);
+      }
+
+      geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+
+      const mat = new THREE.PointsMaterial({
+        color: 0x66aaff,
+        size: 0.04,
+        transparent: true,
+        opacity: 0.65
+      });
+
+      const pts = new THREE.Points(geo, mat);
+      levelGroup.add(pts);
+    }
+
+    function applyCheckpoint(cp) {
+      position.fromArray(cp.spawn);
+      velocity.set(0, 0, 0);
+
+      baseForward.fromArray(cp.forward || [0, 0, -1]).normalize();
+      pitch = 0;
+      grounded = false;
+
+      transition.active = false;
+      queuedGravity = null;
+
+      const g = new THREE.Vector3().fromArray(cp.gravity || [0, -1, 0]).normalize();
+
+      logicGravity.copy(g);
+      logicUp.copy(g).multiplyScalar(-1);
+
+      camera.fov = 75;
+      camera.updateProjectionMatrix();
+
+      updateCameraOrientation();
+
+      camera.position.copy(position).add(
+        logicUp.clone().multiplyScalar(eyeHeight)
+      );
+    }
+
+    // ---------- Механизмы ----------
+    function resetMechanisms() {
+      doorTimers = {};
+      doorTickState = {};
+
+      for (const b of buttons) {
+        b.activated = false;
+        b.wasInside = false;
+        b.mesh.material.color.copy(b.baseColor);
+      }
+
+      for (const id in doorsById) {
+        const d = doorsById[id];
+        d.open = false;
+        d.mesh.visible = true;
+      }
+    }
+
+    function openDoor(d, silent) {
+      if (!d || d.open) return;
+
+      d.open = true;
+      d.mesh.visible = false;
+    }
+
+    function closeDoor(d, silent) {
+      if (!d) return;
+
+      if (!d.open) {
+        delete doorTimers[d.id];
+        delete doorTickState[d.id];
+        return;
+      }
+
+      d.open = false;
+      d.mesh.visible = true;
+
+      delete doorTimers[d.id];
+      delete doorTickState[d.id];
+
+      for (const bid of d.timedButtonIds || []) {
+        const b = buttons.find((x) => x.id === bid);
+        if (b) {
+          b.mesh.material.color.copy(b.baseColor);
+        }
+      }
+
+      if (!silent) {
+        playDoorClose();
+        showToast('Дверь закрыта');
+      }
+    }
+
+    function activateNormalButton(b, silent) {
+      if (!b || b.activated) return;
+
+      b.activated = true;
+      b.mesh.material.color.set(0x00ff88);
+
+      playButton();
+
+      if (b.opens && doorsById[b.opens]) {
+        openDoor(doorsById[b.opens], true);
+        playDoorOpen();
+      }
+
+      if (!silent) {
+        showToast('Кнопка активирована');
+      }
+    }
+
+    function triggerTimedButton(b) {
+      if (!b || !b.timed) return;
+
+      const d = doorsById[b.opens];
+      if (!d) return;
+
+      if (!d.open) {
+        openDoor(d, true);
+      }
+
+      doorTimers[d.id] = b.timed;
+      doorTickState[d.id] = Math.ceil(b.timed);
+
+      b.mesh.material.color.set(0x00ff88);
+
+      playButton();
+      playDoorOpen();
+
+      showToast(`Дверь открыта на ${b.timed} сек`);
+    }
+
+    function applyButtonState(ids) {
+      resetMechanisms();
+
+      for (const id of ids) {
+        const b = buttons.find((x) => x.id === id);
+        if (b && !b.timed) {
+          activateNormalButton(b, true);
+        }
+      }
+    }
+
+    function updateButtons() {
+      for (const b of buttons) {
+        const inside = insideBox(position, b.zone);
+
+        if (inside && !b.wasInside) {
+          if (b.timed) {
+            triggerTimedButton(b);
+          } else {
+            activateNormalButton(b, false);
+          }
+        }
+
+        b.wasInside = inside;
+      }
+    }
+
+    function updateCheckpoints() {
+      for (const cp of checkpointList) {
+        if (insideBox(position, cp.zone)) {
+          if (currentCheckpointId !== cp.id) {
+            currentCheckpoint = cp;
+            currentCheckpointId = cp.id;
+
+            checkpointTime = levelTime;
+
+            checkpointButtonState = buttons
+              .filter((b) => b.activated && !b.timed)
+              .map((b) => b.id);
+
+            playCheckpoint();
+            showToast('Чекпоинт сохранён');
+          }
+        }
+      }
+    }
+
+    function updateDoorTimers(dt) {
+      const ids = Object.keys(doorTimers);
+
+      for (const id of ids) {
+        if (doorTimers[id] > 0) {
+          doorTimers[id] -= dt;
+
+          const sec = Math.ceil(doorTimers[id]);
+
+          if (sec !== doorTickState[id]) {
+            doorTickState[id] = sec;
+            if (sec > 0) playTick(sec <= 1);
+          }
+
+          if (doorTimers[id] <= 0) {
+            closeDoor(doorsById[id], false);
+          }
+        }
+      }
+    }
+
+    function loadLevel(index) {
+      if (nextLevelTimeout) {
+        clearTimeout(nextLevelTimeout);
+        nextLevelTimeout = null;
+      }
+
+      if (deathTimeout) {
+        clearTimeout(deathTimeout);
+        deathTimeout = null;
+      }
+
+      currentLevelIndex = index;
+      const data = LEVELS[index];
+      currentLevelData = data;
+
+      levelRoom = { ...data.room };
+
+      scene.remove(levelGroup);
+      disposeGroup(levelGroup);
+
+      levelGroup = new THREE.Group();
+      scene.add(levelGroup);
+
+      obstacles = [];
+      hazards = [];
+      hazardMeshes = [];
+      platforms = [];
+
+      buttons = [];
+      doorsById = {};
+      buttonMeshes = [];
+      doorMeshes = [];
+      doorTimers = {};
+      doorTickState = {};
+
+      checkpointList = [];
+      checkpointMeshes = [];
+
+      exitZone = null;
+      currentExitMesh = null;
+
+      won = false;
+      dead = false;
+
+      levelTime = 0;
+      checkpointTime = 0;
+      currentCheckpointId = 'start';
+      checkpointButtonState = [];
+
+      groundedPlatform = null;
+      lastGroundPlatform = null;
+
+      currentCheckpoint = {
+        id: 'start',
+        spawn: data.spawn,
+        forward: data.forward || [0, 0, -1],
+        gravity: [0, -1, 0]
+      };
+
+      const shell = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          levelRoom.x * 2,
+          levelRoom.y * 2,
+          levelRoom.z * 2
+        ),
+        new THREE.MeshStandardMaterial({
+          color: data.roomColor || 0x151b2e,
+          roughness: 0.85,
+          metalness: 0.15,
+          side: THREE.BackSide
+        })
+      );
+      levelGroup.add(shell);
+
+      const grid = new THREE.GridHelper(levelRoom.z * 2, 20, 0x3d6dff, 0x1b2a55);
+      grid.position.y = -levelRoom.y + 0.01;
+      levelGroup.add(grid);
+
+      for (const o of data.obstacles || []) {
+        addBoxToLevel(o.x, o.y, o.z, o.sx, o.sy, o.sz, o.color);
+      }
+
+      for (const p of data.platforms || []) {
+        addPlatformToLevel(p);
+      }
+
+      for (const hz of data.hazards || []) {
+        addHazardToLevel(hz.x, hz.y, hz.z, hz.sx, hz.sy, hz.sz);
+      }
+
+      for (const d of data.doors || []) {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(...d.mesh.size),
+          new THREE.MeshBasicMaterial({
+            color: d.mesh.color || 0xff8844,
+            transparent: true,
+            opacity: 0.82
+          })
+        );
+
+        mesh.position.fromArray(d.mesh.pos);
+        levelGroup.add(mesh);
+
+        doorsById[d.id] = {
+          id: d.id,
+          open: false,
+          mesh,
+          timedButtonIds: []
+        };
+
+        doorMeshes.push(mesh);
+      }
+
+      for (const b of data.buttons || []) {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(...b.mesh.size),
+          new THREE.MeshBasicMaterial({
+            color: b.mesh.color || 0xffcc00,
+            transparent: true,
+            opacity: 0.95
+          })
+        );
+
+        mesh.position.fromArray(b.mesh.pos);
+        levelGroup.add(mesh);
+
+        const zone = {
+          min: new THREE.Vector3().fromArray(b.zone.min),
+          max: new THREE.Vector3().fromArray(b.zone.max)
+        };
+
+        const buttonObj = {
+          id: b.id,
+          opens: b.opens,
+          timed: b.timed || 0,
+          zone,
+          mesh,
+          activated: false,
+          wasInside: false,
+          baseColor: new THREE.Color(b.mesh.color || 0xffcc00)
+        };
+
+        buttons.push(buttonObj);
+        buttonMeshes.push(mesh);
+
+        if (buttonObj.timed && buttonObj.opens && doorsById[buttonObj.opens]) {
+          doorsById[buttonObj.opens].timedButtonIds.push(buttonObj.id);
+        }
+      }
+
+      for (const cp of data.checkpoints || []) {
+        const min = new THREE.Vector3().fromArray(cp.zone.min);
+        const max = new THREE.Vector3().fromArray(cp.zone.max);
+
+        const size = max.clone().sub(min);
+        const center = min.clone().add(max).multiplyScalar(0.5);
+
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(size.x, size.y, size.z),
+          new THREE.MeshBasicMaterial({
+            color: 0x00ccff,
+            transparent: true,
+            opacity: 0.16
+          })
+        );
+
+        mesh.position.copy(center);
+        levelGroup.add(mesh);
+        checkpointMeshes.push(mesh);
+
+        checkpointList.push({
+          id: cp.id,
+          zone: { min, max },
+          spawn: cp.spawn,
+          forward: cp.forward || [0, 0, -1],
+          gravity: cp.gravity || [0, -1, 0]
+        });
+      }
+
+      currentExitMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(...data.exitMesh.size),
+        new THREE.MeshBasicMaterial({
+          color: data.exitMesh.color || 0x00ff88,
+          transparent: true,
+          opacity: 0.55
+        })
+      );
+      currentExitMesh.position.fromArray(data.exitMesh.pos);
+      levelGroup.add(currentExitMesh);
+
+      exitZone = {
+        min: new THREE.Vector3().fromArray(data.exitZone.min),
+        max: new THREE.Vector3().fromArray(data.exitZone.max)
+      };
+
+      makeDust();
+
+      applyCheckpoint(currentCheckpoint);
+      applyButtonState([]);
+
+      winEl.style.display = 'none';
+      deathEl.style.display = 'none';
+
+      saveProgress(index);
+      saveCampaign();
+      updateHud();
+    }
+
+    // ---------- Ориентация камеры ----------
+    function getCameraForward() {
+      return new THREE.Vector3(0, 0, -1)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+    }
+
+    function updateCameraOrientation() {
+      const maxPitch = Math.PI / 2 - 0.22;
+      pitch = THREE.MathUtils.clamp(pitch, -maxPitch, maxPitch);
+
+      if (baseForward.lengthSq() < 1e-6) {
+        baseForward.set(0, 0, -1);
+      }
+
+      baseForward
+        .sub(logicUp.clone().multiplyScalar(baseForward.dot(logicUp)))
+        .normalize();
+
+      const viewDir = baseForward
+        .clone()
+        .multiplyScalar(Math.cos(pitch))
+        .add(logicUp.clone().multiplyScalar(Math.sin(pitch)))
+        .normalize();
+
+      const m = new THREE.Matrix4().lookAt(
+        new THREE.Vector3(0, 0, 0),
+        viewDir,
+        logicUp
+      );
+
+      camera.quaternion.setFromRotationMatrix(m);
+    }
+
+    function computeTargetOrientation(
+      currentForward,
+      currentRight,
+      currentUp,
+      targetUp
+    ) {
+      const maxPitch = Math.PI / 2 - 0.22;
+
+      const dot = THREE.MathUtils.clamp(
+        currentForward.dot(targetUp),
+        -1,
+        1
+      );
+
+      const targetPitch = THREE.MathUtils.clamp(
+        Math.asin(dot),
+        -maxPitch,
+        maxPitch
+      );
+
+      let targetBase = projectOnPlane(currentForward, targetUp);
+
+      if (targetBase.lengthSq() < 1e-6) {
+        targetBase = projectOnPlane(currentRight, targetUp);
+      }
+
+      if (targetBase.lengthSq() < 1e-6) {
+        targetBase = projectOnPlane(currentUp, targetUp);
+      }
+
+      if (targetBase.lengthSq() < 1e-6) {
+        const helper =
+          Math.abs(targetUp.y) < 0.9
+            ? new THREE.Vector3(0, 1, 0)
+            : new THREE.Vector3(1, 0, 0);
+
+        targetBase = projectOnPlane(helper, targetUp);
+      }
+
+      targetBase.normalize();
+
+      const viewDir = targetBase
+        .clone()
+        .multiplyScalar(Math.cos(targetPitch))
+        .add(targetUp.clone().multiplyScalar(Math.sin(targetPitch)))
+        .normalize();
+
+      const m = new THREE.Matrix4().lookAt(
+        new THREE.Vector3(0, 0, 0),
+        viewDir,
+        targetUp
+      );
+
+      const quat = new THREE.Quaternion().setFromRotationMatrix(m);
+
+      return {
+        quat,
+        baseForward: targetBase,
+        pitch: targetPitch
+      };
+    }
+
+    function requestGravity(dir) {
+      if (won || dead) return;
+
+      if (transition.active) {
+        queuedGravity = dir.clone();
+        return;
+      }
+
+      if (logicGravity.distanceTo(dir) < 0.001) return;
+
+      const currentForward = getCameraForward();
+      const currentRight = new THREE.Vector3(1, 0, 0)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+      const currentUp = new THREE.Vector3(0, 1, 0)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+
+      const targetUp = dir.clone().multiplyScalar(-1).normalize();
+
+      const orient = computeTargetOrientation(
+        currentForward,
+        currentRight,
+        currentUp,
+        targetUp
+      );
+
+      transition.active = true;
+      transition.t = 0;
+
+      transition.startQuat.copy(camera.quaternion);
+      transition.targetQuat.copy(orient.quat);
+
+      transition.targetGravity.copy(dir).normalize();
+      transition.targetUp.copy(targetUp);
+      transition.targetBaseForward.copy(orient.baseForward);
+      transition.targetPitch = orient.pitch;
+
+      queuedGravity = null;
+    }
+
+    // ---------- Коллизии ----------
+    function resolveCollisionBox(boxMin, boxMax, platform) {
+      const bMin = boxMin.clone().subScalar(radius);
+      const bMax = boxMax.clone().addScalar(radius);
+
+      if (
+        position.x > bMin.x &&
+        position.x < bMax.x &&
+        position.y > bMin.y &&
+        position.y < bMax.y &&
+        position.z > bMin.z &&
+        position.z < bMax.z
+      ) {
+        const dxMin = position.x - bMin.x;
+        const dxMax = bMax.x - position.x;
+        const dyMin = position.y - bMin.y;
+        const dyMax = bMax.y - position.y;
+        const dzMin = position.z - bMin.z;
+        const dzMax = bMax.z - position.z;
+
+        const pen = Math.min(dxMin, dxMax, dyMin, dyMax, dzMin, dzMax);
+
+        let normal = new THREE.Vector3();
+
+        if (pen === dxMin) {
+          position.x = bMin.x;
+          if (velocity.x < 0) velocity.x = 0;
+          normal.set(-1, 0, 0);
+        } else if (pen === dxMax) {
+          position.x = bMax.x;
+          if (velocity.x > 0) velocity.x = 0;
+          normal.set(1, 0, 0);
+        } else if (pen === dyMin) {
+          position.y = bMin.y;
+          if (velocity.y < 0) velocity.y = 0;
+          normal.set(0, -1, 0);
+        } else if (pen === dyMax) {
+          position.y = bMax.y;
+          if (velocity.y > 0) velocity.y = 0;
+          normal.set(0, 1, 0);
+        } else if (pen === dzMin) {
+          position.z = bMin.z;
+          if (velocity.z < 0) velocity.z = 0;
+          normal.set(0, 0, -1);
+        } else if (pen === dzMax) {
+          position.z = bMax.z;
+          if (velocity.z > 0) velocity.z = 0;
+          normal.set(0, 0, 1);
+        }
+
+        if (normal.dot(logicUp) > 0.82) {
+          grounded = true;
+          if (platform) groundedPlatform = platform;
+        }
+      }
+    }
+
+    function tryGround(normal) {
+      if (normal.dot(logicUp) > 0.82) {
+        grounded = true;
+      }
+    }
+
+    function collide() {
+      grounded = false;
+      groundedPlatform = null;
+
+      const min = new THREE.Vector3(
+        -levelRoom.x + radius,
+        -levelRoom.y + radius,
+        -levelRoom.z + radius
+      );
+
+      const max = new THREE.Vector3(
+        levelRoom.x - radius,
+        levelRoom.y - radius,
+        levelRoom.z - radius
+      );
+
+      if (position.x < min.x) {
+        position.x = min.x;
+        if (velocity.x < 0) velocity.x = 0;
+        tryGround(new THREE.Vector3(1, 0, 0));
+      }
+
+      if (position.x > max.x) {
+        position.x = max.x;
+        if (velocity.x > 0) velocity.x = 0;
+        tryGround(new THREE.Vector3(-1, 0, 0));
+      }
+
+      if (position.y < min.y) {
+        position.y = min.y;
+        if (velocity.y < 0) velocity.y = 0;
+        tryGround(new THREE.Vector3(0, 1, 0));
+      }
+
+      if (position.y > max.y) {
+        position.y = max.y;
+        if (velocity.y > 0) velocity.y = 0;
+        tryGround(new THREE.Vector3(0, -1, 0));
+      }
+
+      if (position.z < min.z) {
+        position.z = min.z;
+        if (velocity.z < 0) velocity.z = 0;
+        tryGround(new THREE.Vector3(0, 0, 1));
+      }
+
+      if (position.z > max.z) {
+        position.z = max.z;
+        if (velocity.z > 0) velocity.z = 0;
+        tryGround(new THREE.Vector3(0, 0, -1));
+      }
+
+      for (const o of obstacles) {
+        resolveCollisionBox(o.min, o.max, null);
+      }
+
+      for (const p of platforms) {
+        resolveCollisionBox(p.min, p.max, p);
+      }
+    }
+
+    // ---------- Опасность / смерть ----------
+    function checkHazards() {
+      const pad = hazardPadding;
+
+      for (const h of hazards) {
+        if (
+          position.x > h.min.x - pad &&
+          position.x < h.max.x + pad &&
+          position.y > h.min.y - pad &&
+          position.y < h.max.y + pad &&
+          position.z > h.min.z - pad &&
+          position.z < h.max.z + pad
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    function respawnAtCheckpoint() {
+      dead = false;
+      deathEl.style.display = 'none';
+
+      applyCheckpoint(currentCheckpoint);
+      applyButtonState(checkpointButtonState);
+
+      levelTime = checkpointTime;
+      lastGroundPlatform = null;
+
+      showToast('Возрождение на чекпоинте');
+    }
+
+    function die() {
+      if (dead || won) return;
+
+      dead = true;
+      transition.active = false;
+      queuedGravity = null;
+      velocity.set(0, 0, 0);
+      lastGroundPlatform = null;
+
+      camera.fov = 75;
+      camera.updateProjectionMatrix();
+
+      updateCameraOrientation();
+
+      playDeath();
+
+      deathEl.textContent = 'Смерть. Возрождение на чекпоинте...';
+      deathEl.style.display = 'flex';
+
+      deathTimeout = setTimeout(() => {
+        respawnAtCheckpoint();
+      }, 900);
+    }
+
+    // ---------- Игрок ----------
+    function updatePlayer(dt) {
+      if (won || dead) return;
+
+      const allowInput = !transition.active;
+
+      let ix = 0;
+      let iy = 0;
+
+      if (allowInput) {
+        ix = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+        iy = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+      }
+
+      const input = new THREE.Vector2(ix, iy);
+      if (input.lengthSq() > 1) input.normalize();
+
+      const right = baseForward.clone().cross(logicUp).normalize();
+
+      const wish = baseForward
+        .clone()
+        .multiplyScalar(input.y)
+        .add(right.multiplyScalar(input.x));
+
+      const oldVertical = velocity.clone().projectOnVector(logicGravity);
+
+      velocity.copy(wish.multiplyScalar(speed)).add(oldVertical);
+
+      if (allowInput && keys.has('Space') && grounded) {
+        velocity.add(logicUp.clone().multiplyScalar(jumpSpeed));
+        grounded = false;
+      }
+
+      velocity.add(
+        logicGravity.clone().multiplyScalar(gravityStrength * dt)
+      );
+
+      position.add(velocity.clone().multiplyScalar(dt));
+
+      collide();
+
+      if (checkHazards()) {
+        die();
+        return;
+      }
+
+      updateButtons();
+      updateCheckpoints();
+
+      if (!won && exitZone && insideBox(position, exitZone)) {
+        if (!isExitLocked()) {
+          winLevel();
+        }
+      }
+    }
+
+    function winLevel() {
+      if (won || dead) return;
+
+      won = true;
+      transition.active = false;
+      queuedGravity = null;
+      velocity.set(0, 0, 0);
+      lastGroundPlatform = null;
+
+      camera.fov = 75;
+      camera.updateProjectionMatrix();
+
+      updateCameraOrientation();
+
+      const idx = currentLevelIndex;
+      const t = levelTime;
+      const oldBest = bestTimes[idx];
+
+      let newLevelRecord = false;
+
+      if (oldBest == null || t < oldBest) {
+        bestTimes[idx] = t;
+        saveBestTimes();
+        newLevelRecord = true;
+      }
+
+      let newTotalRecord = false;
+      let campaignLine = '';
+
+      if (campaignValid) {
+        campaignTime += t;
+
+        if (idx === LEVELS.length - 1) {
+          if (totalBest == null || campaignTime < totalBest) {
+            totalBest = campaignTime;
+            saveTotalBest(totalBest);
+            newTotalRecord = true;
+          }
+
+          campaignValid = false;
+        }
+
+        saveCampaign();
+
+        campaignLine = `<br>Общее время кампании: ${formatTime(campaignTime)}`;
+      }
+
+      playWin();
+
+      const levelRecordText = newLevelRecord ? '<br>Новый рекорд уровня!' : '';
+      const totalRecordText = newTotalRecord ? '<br>Новый общий рекорд!' : '';
+
+      if (idx < LEVELS.length - 1) {
+        winEl.innerHTML = `
+          Уровень пройден!<br>
+          Время: ${formatTime(t)}<br>
+          Лучшее: ${formatTime(bestTimes[idx])}
+          ${levelRecordText}
+          ${campaignLine}
+        `;
+        winEl.style.display = 'flex';
+
+        nextLevelTimeout = setTimeout(() => {
+          loadLevel(idx + 1);
+        }, 1700);
+      } else {
+        winEl.innerHTML = `
+          Все уровни пройдены!<br>
+          Время последнего уровня: ${formatTime(t)}<br>
+          Лучшее: ${formatTime(bestTimes[idx])}
+          ${levelRecordText}
+          ${campaignLine}
+          ${totalRecordText}<br>
+          Нажми Shift + R или выбери «Новая игра» в меню.
+        `;
+        winEl.style.display = 'flex';
+      }
+    }
+
+    // ---------- Ввод ----------
+    addEventListener('keydown', (e) => {
+      if (e.code === 'KeyM') {
+        soundEnabled = !soundEnabled;
+        ensureAudio();
+        showToast(soundEnabled ? 'Звук включён' : 'Звук выключен');
+        return;
+      }
+
+      if (document.pointerLockElement !== renderer.domElement) return;
+
+      if (e.code === 'Space') e.preventDefault();
+
+      keys.add(e.code);
+
+      if (e.code === 'KeyR') {
+        if (e.shiftKey) {
+          campaignValid = true;
+          campaignTime = 0;
+          saveCampaign();
+          loadLevel(0);
+        } else if (won && currentLevelIndex === LEVELS.length - 1) {
+          loadLevel(0);
+        } else {
+          loadLevel(currentLevelIndex);
+        }
+
+        return;
+      }
+
+      if (
+        e.code === 'Enter' &&
+        won &&
+        !dead &&
+        currentLevelIndex < LEVELS.length - 1
+      ) {
+        loadLevel(currentLevelIndex + 1);
+        return;
+      }
+
+      if (dead || won) return;
+
+      if (gravityKeys[e.code]) {
+        requestGravity(gravityKeys[e.code]);
+      }
+    });
+
+    addEventListener('keyup', (e) => {
+      keys.delete(e.code);
+    });
+
+    renderer.domElement.addEventListener('click', () => {
+      if (document.pointerLockElement !== renderer.domElement) {
+        renderer.domElement.requestPointerLock();
+      }
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement === renderer.domElement) {
+        hideMenu();
+      } else {
+        keys.clear();
+
+        for (const p of platforms) {
+          p.delta.set(0, 0, 0);
+        }
+
+        lastGroundPlatform = null;
+        showMenu('root');
+      }
+    });
+
+    addEventListener('mousemove', (e) => {
+      if (
+        document.pointerLockElement !== renderer.domElement ||
+        transition.active ||
+        won ||
+        dead
+      ) {
+        return;
+      }
+
+      const sens = 0.0021;
+
+      baseForward.applyAxisAngle(logicUp, -e.movementX * sens);
+
+      baseForward
+        .sub(logicUp.clone().multiplyScalar(baseForward.dot(logicUp)))
+        .normalize();
+
+      pitch -= e.movementY * sens;
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // ---------- Редактор уровней ----------
+    function editorMsg(text) {
+      const el = document.getElementById('editor-msg');
+      if (el) el.textContent = text;
+    }
+
+    function openEditor() {
+      const ta = document.getElementById('editor-text');
+      if (ta) {
+        ta.value = JSON.stringify(currentLevelData, null, 2);
+      }
+
+      editorMsg('');
+      showMenu('editor');
+    }
+
+    function validateEditorLevel(lv) {
+      if (!lv || typeof lv !== 'object') {
+        throw new Error('Уровень должен быть объектом');
+      }
+
+      if (!lv.name || typeof lv.name !== 'string') {
+        throw new Error('Нужно имя уровня: name');
+      }
+
+      if (!lv.room || typeof lv.room !== 'object') {
+        throw new Error('Нужен объект room');
+      }
+
+      if (typeof lv.room.x !== 'number') throw new Error('room.x должен быть числом');
+      if (typeof lv.room.y !== 'number') throw new Error('room.y должен быть числом');
+      if (typeof lv.room.z !== 'number') throw new Error('room.z должен быть числом');
+
+      if (!Array.isArray(lv.spawn) || lv.spawn.length !== 3) {
+        throw new Error('spawn должен быть массивом из 3 чисел');
+      }
+
+      if (!lv.exitMesh || !Array.isArray(lv.exitMesh.pos) || !Array.isArray(lv.exitMesh.size)) {
+        throw new Error('Нужен exitMesh с pos и size');
+      }
+
+      if (!lv.exitZone || !lv.exitZone.min || !lv.exitZone.max) {
+        throw new Error('Нужен exitZone с min и max');
+      }
+    }
+
+    function applyEditorLevel() {
+      const ta = document.getElementById('editor-text');
+
+      try {
+        const parsed = JSON.parse(ta.value);
+
+        validateEditorLevel(parsed);
+
+        LEVELS[currentLevelIndex] = parsed;
+        currentLevelData = parsed;
+
+        loadLevel(currentLevelIndex);
+
+        editorMsg('Уровень применён. Теперь он активен в игре.');
+        showMenu('root');
+      } catch (err) {
+        editorMsg(`Ошибка: ${err.message}`);
+      }
+    }
+
+    function addBlankLevel() {
+      const blank = {
+        name: `Уровень ${LEVELS.length + 1} — Новый`,
+        hint: 'Новый уровень. Отредактируй его через редактор JSON.',
+        room: { x: 12, y: 6, z: 12 },
+        roomColor: 0x151b2e,
+        spawn: [0, -6 + radius, 6],
+        forward: [0, 0, -1],
+        obstacles: [],
+        platforms: [],
+        hazards: [],
+        checkpoints: [],
+        buttons: [],
+        doors: [],
+        exitMesh: {
+          pos: [11.92, 0, 0],
+          size: [0.15, 4, 4],
+          color: 0x00ff88
+        },
+        exitZone: {
+          min: [10.6, -2, -2],
+          max: [12, 2, 2]
+        }
+      };
+
+      LEVELS.push(blank);
+      bestTimes.push(null);
+
+      currentLevelIndex = LEVELS.length - 1;
+      loadLevel(currentLevelIndex);
+
+      openEditor();
+
+      editorMsg('Добавлен новый пустой уровень. Теперь ты можешь отредактировать его JSON.');
+    }
+
+    document.getElementById('btn-editor').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+      openEditor();
+    });
+
+    document.getElementById('btn-editor-load').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+
+      const ta = document.getElementById('editor-text');
+      ta.value = JSON.stringify(currentLevelData, null, 2);
+
+      editorMsg('Текущий уровень загружен в редактор.');
+    });
+
+    document.getElementById('btn-editor-apply').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+      applyEditorLevel();
+    });
+
+    document.getElementById('btn-editor-copy').addEventListener('click', async () => {
+      ensureAudio();
+      playClick();
+
+      const ta = document.getElementById('editor-text');
+
+      try {
+        await navigator.clipboard.writeText(ta.value);
+        editorMsg('Скопировано в буфер обмена.');
+      } catch (e) {
+        ta.focus();
+        ta.select();
+
+        try {
+          document.execCommand('copy');
+          editorMsg('Скопировано (резервный способ).');
+        } catch (err) {
+          editorMsg('Не удалось скопировать автоматически.');
+        }
+      }
+    });
+
+    document.getElementById('btn-editor-new').addEventListener('click', () => {
+      ensureAudio();
+      playClick();
+      addBlankLevel();
+    });
+
+    // ---------- Запуск ----------
+    bestTimes = loadBestTimes();
+    totalBest = loadTotalBest();
+    loadCampaign();
+    loadLevel(loadProgress());
+    showMenu('root');
+
+    const clock = new THREE.Clock();
+
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(clock.getDelta(), 0.033);
+      const locked = document.pointerLockElement === renderer.domElement;
+
+      if (locked && transition.active) {
+        transition.t += dt / transitionDuration;
+
+        const raw = Math.min(transition.t, 1);
+        const alpha = raw * raw * (3 - 2 * raw);
+
+        camera.quaternion
+          .copy(transition.startQuat)
+          .slerp(transition.targetQuat, alpha);
+
+        camera.fov = 75 + Math.sin(alpha * Math.PI) * 6;
+        camera.updateProjectionMatrix();
+
+        if (raw >= 1) {
+          logicGravity.copy(transition.targetGravity);
+          logicUp.copy(transition.targetUp);
+          baseForward.copy(transition.targetBaseForward);
+          pitch = transition.targetPitch;
+
+          transition.active = false;
+
+          camera.fov = 75;
+          camera.updateProjectionMatrix();
+
+          updateCameraOrientation();
+
+          if (queuedGravity) {
+            const g = queuedGravity.clone();
+            queuedGravity = null;
+            requestGravity(g);
+          }
+        }
+      } else if (!transition.active && Math.abs(camera.fov - 75) > 0.01) {
+        camera.fov += (75 - camera.fov) * 0.2;
+        camera.updateProjectionMatrix();
+      }
+
+      if (!won && !dead && locked) {
+        updatePlatforms(dt);
+
+        if (lastGroundPlatform) {
+          position.add(lastGroundPlatform.delta);
+        }
+
+        levelTime += dt;
+        updatePlayer(dt);
+
+        if (!won && !dead) {
+          lastGroundPlatform = groundedPlatform;
+          updateDoorTimers(dt);
+        } else {
+          lastGroundPlatform = null;
+        }
+      } else if (!won && !dead) {
+        velocity.set(0, 0, 0);
+        grounded = false;
+        lastGroundPlatform = null;
+
+        for (const p of platforms) {
+          p.delta.set(0, 0, 0);
+        }
+      }
+
+      if (!transition.active) {
+        updateCameraOrientation();
+      }
+
+      const visualUp = new THREE.Vector3(0, 1, 0).applyQuaternion(
+        camera.quaternion
+      );
+
+      const camPos = position
+        .clone()
+        .add(visualUp.multiplyScalar(eyeHeight));
+
+      camPos.x = THREE.MathUtils.clamp(
+        camPos.x,
+        -levelRoom.x + 0.05,
+        levelRoom.x - 0.05
+      );
+
+      camPos.y = THREE.MathUtils.clamp(
+        camPos.y,
+        -levelRoom.y + 0.05,
+        levelRoom.y - 0.05
+      );
+
+      camPos.z = THREE.MathUtils.clamp(
+        camPos.z,
+        -levelRoom.z + 0.05,
+        levelRoom.z - 0.05
+      );
+
+      camera.position.copy(camPos);
+
+      const now = performance.now();
+
+      if (currentExitMesh) {
+        currentExitMesh.material.opacity =
+          0.35 + Math.sin(now * 0.004) * 0.2;
+      }
+
+      const hazardPulse =
+        0.32 + Math.sin(now * 0.006) * 0.18;
+
+      for (const mesh of hazardMeshes) {
+        mesh.material.opacity = hazardPulse;
+      }
+
+      const checkpointPulse =
+        0.12 + Math.sin(now * 0.004) * 0.06;
+
+      for (const mesh of checkpointMeshes) {
+        mesh.material.opacity = checkpointPulse;
+      }
+
+      for (const mesh of doorMeshes) {
+        if (mesh.visible) {
+          mesh.material.opacity = 0.7 + Math.sin(now * 0.005) * 0.15;
+        }
+      }
+
+      updateHud();
+      renderer.render(scene, camera);
+    });
+  </script>
+</body>
+</html>

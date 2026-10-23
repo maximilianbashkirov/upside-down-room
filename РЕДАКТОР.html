@@ -1,0 +1,1863 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Комната вверх дном — редактор + игра в одном файле</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05070f;
+      font-family: Arial, sans-serif;
+      color: #fff;
+    }
+
+    #editor-ui {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 320px;
+      background: rgba(8, 12, 24, 0.96);
+      border-right: 1px solid rgba(255,255,255,0.12);
+      padding: 12px;
+      box-sizing: border-box;
+      overflow: auto;
+      z-index: 20;
+    }
+
+    #view {
+      position: fixed;
+      left: 320px;
+      top: 0;
+      right: 0;
+      bottom: 0;
+    }
+
+    body.play-mode #editor-ui {
+      display: none;
+    }
+
+    body.play-mode #view {
+      left: 0;
+    }
+
+    h1 {
+      font-size: 19px;
+      margin: 0 0 10px;
+    }
+
+    h2 {
+      font-size: 14px;
+      margin: 14px 0 6px;
+      color: #9fd8ff;
+    }
+
+    label {
+      display: block;
+      margin: 6px 0;
+      font-size: 13px;
+      color: #cde;
+    }
+
+    input, select, button {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(20,28,50,0.9);
+      color: #fff;
+      padding: 6px;
+      font-size: 13px;
+    }
+
+    button {
+      cursor: pointer;
+      margin-top: 6px;
+      background: rgba(35,60,120,0.9);
+    }
+
+    button:hover {
+      background: rgba(60,95,170,0.95);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    #object-list {
+      width: 100%;
+      height: 130px;
+      margin-top: 8px;
+    }
+
+    #props {
+      margin-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      padding-top: 10px;
+    }
+
+    .prop-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .small {
+      font-size: 11px;
+      color: #9ab;
+      line-height: 1.35;
+      margin-top: 8px;
+    }
+
+    #hud {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      z-index: 15;
+      display: none;
+      color: #fff;
+      text-shadow: 0 1px 2px #000;
+      font-size: 14px;
+      pointer-events: none;
+      line-height: 1.35;
+    }
+
+    #message {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 40;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 8px;
+      padding: 8px 14px;
+      opacity: 0;
+      transition: opacity 0.25s;
+      pointer-events: none;
+      font-size: 18px;
+      text-shadow: 0 1px 2px #000;
+    }
+
+    kbd {
+      background: #222;
+      border: 1px solid #666;
+      border-radius: 4px;
+      padding: 0 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="editor-ui">
+    <h1>Комната вверх дном</h1>
+    <p class="small">
+      Редактор + тест-режим.<br>
+      В игре: <kbd>1</kbd> пол, <kbd>2</kbd> потолок, <kbd>3</kbd> левая стена,
+      <kbd>4</kbd> правая стена, <kbd>5</kbd> передняя стена, <kbd>6</kbd> задняя стена.
+    </p>
+
+    <button id="btn-play">▶ Играть / тест уровня</button>
+
+    <h2>Комната (полуразмеры)</h2>
+    <div class="row">
+      <label>X <input id="room-x" type="number" value="12" step="1"></label>
+      <label>Y <input id="room-y" type="number" value="6" step="1"></label>
+      <label>Z <input id="room-z" type="number" value="12" step="1"></label>
+    </div>
+    <button id="btn-room-apply">Применить комнату</button>
+
+    <h2>Добавить объект</h2>
+    <select id="add-type">
+      <option value="obstacle">Препятствие</option>
+      <option value="hazard">Опасная зона</option>
+      <option value="platform">Платформа</option>
+      <option value="checkpoint">Чекпоинт</option>
+      <option value="button">Кнопка</option>
+      <option value="door">Дверь</option>
+      <option value="exit">Выход</option>
+      <option value="spawn">Спавн игрока</option>
+    </select>
+    <button id="btn-add">Добавить объект</button>
+
+    <h2>Объекты</h2>
+    <select id="object-list" size="8"></select>
+
+    <div class="toolbar">
+      <button id="btn-duplicate">Дублировать</button>
+      <button id="btn-delete">Удалить</button>
+    </div>
+
+    <div id="props"></div>
+
+    <h2>Проект</h2>
+    <div class="toolbar">
+      <button id="btn-save">Сохранить</button>
+      <button id="btn-load">Загрузить</button>
+    </div>
+
+    <h2>Экспорт уровня</h2>
+    <div class="toolbar">
+      <button id="btn-copy-json">Копировать JSON</button>
+      <button id="btn-download-json">Скачать JSON</button>
+    </div>
+
+    <button id="btn-clear">Очистить уровень</button>
+
+    <div class="small">
+      Клик по объекту в 3D — выбор.<br>
+      Кнопка открывает дверь с тем же порядковым номером.<br>
+      Если дверей несколько, выход потребует открыть все двери.<br>
+      Esc в тест-режиме возвращает в редактор.
+    </div>
+  </div>
+
+  <div id="hud"></div>
+  <div id="message"></div>
+  <div id="view"></div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const PROJECT_KEY = 'upside-room-editor-game-project-v8';
+
+    const COLORS = {
+      obstacle: 0x6b4df0,
+      hazard: 0xff2244,
+      platform: 0x55aaff,
+      checkpoint: 0x00ccff,
+      button: 0xffcc00,
+      door: 0xff8844,
+      exit: 0x00ff88,
+      spawn: 0x77ff77
+    };
+
+    const view = document.getElementById('view');
+    const editorUI = document.getElementById('editor-ui');
+    const hudEl = document.getElementById('hud');
+    const messageEl = document.getElementById('message');
+
+    let mode = 'edit';
+    let pendingPlay = false;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05070f);
+
+    const camera = new THREE.PerspectiveCamera(
+      65,
+      1,
+      0.1,
+      600
+    );
+    camera.position.set(18, 15, 20);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    view.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x223355, 1.4));
+
+    const sun = new THREE.DirectionalLight(0xffffff, 1.7);
+    sun.position.set(24, 34, 16);
+    scene.add(sun);
+
+    const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+    const sphereGeo = new THREE.SphereGeometry(0.45, 18, 18);
+
+    const roomGroup = new THREE.Group();
+    scene.add(roomGroup);
+
+    const items = [];
+    let nextId = 1;
+    let selected = null;
+    let selectedHelper = null;
+
+    let pointerDownPos = { x: 0, y: 0 };
+
+    // ---------- Игровое состояние ----------
+    const radius = 0.45;
+    const eyeHeight = 0.35;
+    const speed = 6.4;
+    const gravityStrength = 26;
+    const jumpSpeed = 8.6;
+
+    let runtime = null;
+
+    let playerPos = new THREE.Vector3();
+    let playerVel = new THREE.Vector3();
+
+    let logicGravity = new THREE.Vector3(0, -1, 0);
+    let logicUp = new THREE.Vector3(0, 1, 0);
+    let baseForward = new THREE.Vector3(0, 0, -1);
+    let pitch = 0;
+
+    let grounded = false;
+    let groundedPlatform = null;
+    let lastGroundPlatform = null;
+
+    let won = false;
+    let dead = false;
+    let playTimeout = null;
+    let messageTimeout = null;
+
+    let currentCheckpoint = {
+      pos: new THREE.Vector3(),
+      forward: new THREE.Vector3(0, 0, -1),
+      gravity: new THREE.Vector3(0, -1, 0)
+    };
+
+    const keys = new Set();
+
+    const gravityKeys = {
+      Digit1: new THREE.Vector3(0, -1, 0),
+      Digit2: new THREE.Vector3(0, 1, 0),
+      Digit3: new THREE.Vector3(-1, 0, 0),
+      Digit4: new THREE.Vector3(1, 0, 0),
+      Digit5: new THREE.Vector3(0, 0, -1),
+      Digit6: new THREE.Vector3(0, 0, 1)
+    };
+
+    // ---------- Утилиты ----------
+    function roomX() { return Number(document.getElementById('room-x').value) || 12; }
+    function roomY() { return Number(document.getElementById('room-y').value) || 6; }
+    function roomZ() { return Number(document.getElementById('room-z').value) || 12; }
+
+    function layout() {
+      const isEdit = mode === 'edit';
+
+      document.body.classList.toggle('play-mode', !isEdit);
+
+      editorUI.style.display = isEdit ? 'block' : 'none';
+      hudEl.style.display = isEdit ? 'none' : 'block';
+
+      view.style.left = isEdit ? '320px' : '0';
+
+      const w = view.clientWidth;
+      const h = view.clientHeight;
+
+      renderer.setSize(w, h);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+
+    function showMessage(text, ms = 1500) {
+      messageEl.textContent = text;
+      messageEl.style.opacity = '1';
+
+      if (messageTimeout) clearTimeout(messageTimeout);
+
+      messageTimeout = setTimeout(() => {
+        messageEl.style.opacity = '0';
+      }, ms);
+    }
+
+    function projectOnPlane(v, normal) {
+      return v.clone().sub(normal.clone().multiplyScalar(v.dot(normal)));
+    }
+
+    function insideBox(p, box) {
+      return (
+        p.x > box.min.x &&
+        p.x < box.max.x &&
+        p.y > box.min.y &&
+        p.y < box.max.y &&
+        p.z > box.min.z &&
+        p.z < box.max.z
+      );
+    }
+
+    function gravityNameFor(g) {
+      if (g.y < -0.9) return 'пол';
+      if (g.y > 0.9) return 'потолок';
+      if (g.x < -0.9) return 'левая стена';
+      if (g.x > 0.9) return 'правая стена';
+      if (g.z < -0.9) return 'передняя стена';
+      if (g.z > 0.9) return 'задняя стена';
+      return '???';
+    }
+
+    function rebuildRoomVisual() {
+      roomGroup.clear();
+
+      const rx = roomX();
+      const ry = roomY();
+      const rz = roomZ();
+
+      const grid = new THREE.GridHelper(Math.max(rx, rz) * 2, 24, 0x3d6dff, 0x1b2a55);
+      grid.position.y = -ry;
+      roomGroup.add(grid);
+
+      const roomBoxGeo = new THREE.BoxGeometry(rx * 2, ry * 2, rz * 2);
+      const edges = new THREE.EdgesGeometry(roomBoxGeo);
+      const line = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0x4488ff })
+      );
+      roomGroup.add(line);
+    }
+
+    // ---------- Редактор ----------
+    function opacityForType(type) {
+      if (type === 'obstacle') return 0.92;
+      if (type === 'platform') return 0.85;
+      if (type === 'spawn') return 1;
+      return 0.45;
+    }
+
+    function setDefaultItemFields(item) {
+      const rx = roomX();
+      const ry = roomY();
+      const rz = roomZ();
+
+      item.color = COLORS[item.type] || 0xffffff;
+
+      if (item.type === 'spawn') {
+        item.x = 0;
+        item.y = -ry + 0.45;
+        item.z = rz * 0.55;
+      }
+
+      if (item.type === 'exit') {
+        item.x = rx - 0.6;
+        item.y = 0;
+        item.z = 0;
+        item.sx = 1.2;
+        item.sy = 4;
+        item.sz = 4;
+      }
+
+      if (item.type === 'obstacle') {
+        item.x = 0;
+        item.y = 0;
+        item.z = 0;
+        item.sx = 2;
+        item.sy = 2;
+        item.sz = 2;
+      }
+
+      if (item.type === 'hazard') {
+        item.x = 0;
+        item.y = -ry + 0.3;
+        item.z = 0;
+        item.sx = 4;
+        item.sy = 0.6;
+        item.sz = 4;
+      }
+
+      if (item.type === 'platform') {
+        item.x = 0;
+        item.y = -ry + 0.7;
+        item.z = 0;
+        item.sx = 4;
+        item.sy = 0.5;
+        item.sz = 4;
+        item.axis = 'z';
+        item.amp = 5;
+        item.speed = 1;
+        item.phase = Math.PI / 2;
+      }
+
+      if (item.type === 'checkpoint') {
+        item.x = 0;
+        item.y = -ry + 0.75;
+        item.z = -rz * 0.55;
+        item.sx = 3;
+        item.sy = 1.5;
+        item.sz = 3;
+      }
+
+      if (item.type === 'button') {
+        item.x = 0;
+        item.y = 0;
+        item.z = 0;
+        item.sx = 2;
+        item.sy = 0.3;
+        item.sz = 2;
+        item.timed = 3;
+      }
+
+      if (item.type === 'door') {
+        item.x = 0;
+        item.y = 0;
+        item.z = 0;
+        item.sx = 3;
+        item.sy = 3;
+        item.sz = 0.3;
+      }
+    }
+
+    function addItem(type, overrides = null, offset = false) {
+      const item = {
+        id: nextId++,
+        type,
+        x: 0,
+        y: 0,
+        z: 0,
+        sx: 2,
+        sy: 2,
+        sz: 2,
+        axis: 'z',
+        amp: 5,
+        speed: 1,
+        phase: Math.PI / 2,
+        timed: 3,
+        color: COLORS[type] || 0xffffff
+      };
+
+      setDefaultItemFields(item);
+
+      if (overrides) {
+        const clean = { ...overrides };
+        delete clean.id;
+        delete clean.mesh;
+        Object.assign(item, clean);
+      }
+
+      if (offset) {
+        item.x += 1;
+      }
+
+      const geometry = item.type === 'spawn' ? sphereGeo : boxGeo;
+
+      const material = new THREE.MeshBasicMaterial({
+        color: item.color,
+        transparent: true,
+        opacity: opacityForType(item.type),
+        depthWrite: item.type === 'obstacle' || item.type === 'platform'
+      });
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(item.x, item.y, item.z);
+
+      if (item.type !== 'spawn') {
+        mesh.scale.set(item.sx, item.sy, item.sz);
+      }
+
+      mesh.userData.itemId = item.id;
+
+      item.mesh = mesh;
+
+      scene.add(mesh);
+      items.push(item);
+
+      refreshList();
+      selectItem(item);
+    }
+
+    function clearItems() {
+      if (selectedHelper) {
+        scene.remove(selectedHelper);
+        selectedHelper = null;
+      }
+
+      for (const item of items) {
+        scene.remove(item.mesh);
+        item.mesh.material.dispose();
+      }
+
+      items.length = 0;
+      selected = null;
+
+      refreshList();
+      renderProps();
+    }
+
+    function deleteSelected() {
+      if (!selected) return;
+
+      scene.remove(selected.mesh);
+      selected.mesh.material.dispose();
+
+      const idx = items.findIndex((i) => i.id === selected.id);
+      if (idx >= 0) items.splice(idx, 1);
+
+      if (selectedHelper) {
+        scene.remove(selectedHelper);
+        selectedHelper = null;
+      }
+
+      selected = null;
+
+      refreshList();
+      renderProps();
+    }
+
+    function duplicateSelected() {
+      if (!selected) return;
+
+      addItem(selected.type, {
+        x: selected.x,
+        y: selected.y,
+        z: selected.z,
+        sx: selected.sx,
+        sy: selected.sy,
+        sz: selected.sz,
+        axis: selected.axis,
+        amp: selected.amp,
+        speed: selected.speed,
+        phase: selected.phase,
+        timed: selected.timed
+      }, true);
+    }
+
+    function refreshList() {
+      const list = document.getElementById('object-list');
+      list.innerHTML = '';
+
+      items.forEach((item, index) => {
+        const opt = document.createElement('option');
+        opt.value = String(item.id);
+        opt.textContent = `${index + 1}. ${item.type}`;
+
+        if (selected && selected.id === item.id) {
+          opt.selected = true;
+        }
+
+        list.appendChild(opt);
+      });
+    }
+
+    function selectItem(item) {
+      selected = item;
+
+      if (selectedHelper) {
+        scene.remove(selectedHelper);
+        selectedHelper = null;
+      }
+
+      if (selected && mode === 'edit') {
+        selectedHelper = new THREE.BoxHelper(selected.mesh, 0xffffff);
+        scene.add(selectedHelper);
+      }
+
+      refreshList();
+      renderProps();
+    }
+
+    function updateItemVisual(item) {
+      item.mesh.position.set(item.x, item.y, item.z);
+
+      if (item.type !== 'spawn') {
+        item.mesh.scale.set(item.sx, item.sy, item.sz);
+      }
+
+      item.mesh.updateMatrixWorld(true);
+
+      if (selected && selected.id === item.id && selectedHelper) {
+        selectedHelper.update();
+      }
+    }
+
+    function makePropInput(parent, label, key, step = 0.1) {
+      const wrap = document.createElement('label');
+      wrap.textContent = label;
+
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = String(step);
+      input.value = String(selected[key] ?? 0);
+
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        if (isFinite(v)) {
+          selected[key] = v;
+          updateItemVisual(selected);
+        }
+      });
+
+      wrap.appendChild(input);
+      parent.appendChild(wrap);
+    }
+
+    function renderProps() {
+      const panel = document.getElementById('props');
+      panel.innerHTML = '';
+
+      if (!selected) {
+        panel.innerHTML = '<div class="small">Выбери объект, чтобы редактировать его.</div>';
+        return;
+      }
+
+      const title = document.createElement('h2');
+      title.textContent = `Объект: ${selected.type} #${selected.id}`;
+      panel.appendChild(title);
+
+      const grid = document.createElement('div');
+      grid.className = 'prop-grid';
+      panel.appendChild(grid);
+
+      makePropInput(grid, 'X', 'x', 0.1);
+      makePropInput(grid, 'Y', 'y', 0.1);
+      makePropInput(grid, 'Z', 'z', 0.1);
+
+      if (selected.type !== 'spawn') {
+        makePropInput(grid, 'Ширина X', 'sx', 0.1);
+        makePropInput(grid, 'Высота Y', 'sy', 0.1);
+        makePropInput(grid, 'Глубина Z', 'sz', 0.1);
+      }
+
+      if (selected.type === 'platform') {
+        const axisLabel = document.createElement('label');
+        axisLabel.textContent = 'Ось движения';
+
+        const sel = document.createElement('select');
+
+        ['x', 'y', 'z'].forEach((v) => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = v;
+          if (selected.axis === v) opt.selected = true;
+          sel.appendChild(opt);
+        });
+
+        sel.addEventListener('change', () => {
+          selected.axis = sel.value;
+        });
+
+        axisLabel.appendChild(sel);
+        panel.appendChild(axisLabel);
+
+        const grid2 = document.createElement('div');
+        grid2.className = 'prop-grid';
+        panel.appendChild(grid2);
+
+        makePropInput(grid2, 'Амплитуда', 'amp', 0.1);
+        makePropInput(grid2, 'Скорость', 'speed', 0.05);
+        makePropInput(grid2, 'Фаза', 'phase', 0.05);
+      }
+
+      if (selected.type === 'button') {
+        const grid2 = document.createElement('div');
+        grid2.className = 'prop-grid';
+        panel.appendChild(grid2);
+
+        makePropInput(grid2, 'Таймер (0 = обычная)', 'timed', 0.5);
+      }
+    }
+
+    function pickAt(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+
+      const mouse = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1
+      );
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+
+      const meshes = items.map((i) => i.mesh);
+      const hits = raycaster.intersectObjects(meshes, false);
+
+      if (hits.length > 0) {
+        const itemId = hits[0].object.userData.itemId;
+        const item = items.find((i) => i.id === itemId);
+        if (item) selectItem(item);
+      }
+    }
+
+    // ---------- Сохранение проекта ----------
+    function serializeProject() {
+      return {
+        room: {
+          x: roomX(),
+          y: roomY(),
+          z: roomZ()
+        },
+        items: items.map((item) => ({
+          type: item.type,
+          x: item.x,
+          y: item.y,
+          z: item.z,
+          sx: item.sx,
+          sy: item.sy,
+          sz: item.sz,
+          axis: item.axis,
+          amp: item.amp,
+          speed: item.speed,
+          phase: item.phase,
+          timed: item.timed
+        }))
+      };
+    }
+
+    function saveProject() {
+      try {
+        localStorage.setItem(PROJECT_KEY, JSON.stringify(serializeProject()));
+        showMessage('Проект сохранён');
+      } catch (e) {
+        showMessage('Не удалось сохранить');
+      }
+    }
+
+    function loadProject() {
+      try {
+        const raw = localStorage.getItem(PROJECT_KEY);
+        if (!raw) {
+          showMessage('Нет сохранённого проекта');
+          return;
+        }
+
+        const data = JSON.parse(raw);
+
+        document.getElementById('room-x').value = data.room?.x ?? 12;
+        document.getElementById('room-y').value = data.room?.y ?? 6;
+        document.getElementById('room-z').value = data.room?.z ?? 12;
+
+        rebuildRoomVisual();
+
+        clearItems();
+
+        for (const itemData of data.items || []) {
+          if (COLORS[itemData.type] != null) {
+            addItem(itemData.type, itemData, false);
+          }
+        }
+
+        selectItem(null);
+        showMessage('Проект загружен');
+      } catch (e) {
+        showMessage('Ошибка загрузки проекта');
+      }
+    }
+
+    // ---------- Экспорт JSON ----------
+    function boxMinMax(item) {
+      return {
+        min: [
+          item.x - item.sx / 2,
+          item.y - item.sy / 2,
+          item.z - item.sz / 2
+        ],
+        max: [
+          item.x + item.sx / 2,
+          item.y + item.sy / 2,
+          item.z + item.sz / 2
+        ]
+      };
+    }
+
+    function buildLevelJSON() {
+      const spawnItem = items.find((i) => i.type === 'spawn');
+      const exitItem = items.find((i) => i.type === 'exit');
+
+      if (!spawnItem) throw new Error('Нужен хотя бы один спавн игрока.');
+      if (!exitItem) throw new Error('Нужен хотя бы один выход.');
+
+      const room = {
+        x: roomX(),
+        y: roomY(),
+        z: roomZ()
+      };
+
+      const obstacles = items
+        .filter((i) => i.type === 'obstacle')
+        .map((i) => ({
+          x: i.x,
+          y: i.y,
+          z: i.z,
+          sx: i.sx,
+          sy: i.sy,
+          sz: i.sz,
+          color: i.color
+        }));
+
+      const hazards = items
+        .filter((i) => i.type === 'hazard')
+        .map((i) => ({
+          x: i.x,
+          y: i.y,
+          z: i.z,
+          sx: i.sx,
+          sy: i.sy,
+          sz: i.sz
+        }));
+
+      const platforms = items
+        .filter((i) => i.type === 'platform')
+        .map((i) => ({
+          x: i.x,
+          y: i.y,
+          z: i.z,
+          sx: i.sx,
+          sy: i.sy,
+          sz: i.sz,
+          axis: i.axis || 'z',
+          amp: i.amp || 0,
+          speed: i.speed || 1,
+          phase: i.phase || 0,
+          color: i.color
+        }));
+
+      const checkpoints = items
+        .filter((i) => i.type === 'checkpoint')
+        .map((i, idx) => {
+          const box = boxMinMax(i);
+
+          return {
+            id: `checkpoint-${idx + 1}`,
+            zone: box,
+            spawn: [i.x, i.y, i.z],
+            forward: [0, 0, -1],
+            gravity: [0, -1, 0]
+          };
+        });
+
+      const doors = items
+        .filter((i) => i.type === 'door')
+        .map((i, idx) => ({
+          id: `door-${idx + 1}`,
+          mesh: {
+            pos: [i.x, i.y, i.z],
+            size: [i.sx, i.sy, i.sz],
+            color: i.color
+          }
+        }));
+
+      const buttons = items
+        .filter((i) => i.type === 'button')
+        .map((i, idx) => {
+          const box = boxMinMax(i);
+          const targetDoor = doors[idx] || null;
+
+          return {
+            id: `button-${idx + 1}`,
+            opens: targetDoor ? targetDoor.id : null,
+            timed: i.timed || 0,
+            zone: box,
+            mesh: {
+              pos: [i.x, i.y, i.z],
+              size: [i.sx, i.sy, i.sz],
+              color: i.color
+            }
+          };
+        });
+
+      const exitBox = boxMinMax(exitItem);
+
+      const level = {
+        name: 'Уровень из редактора',
+        hint: 'Уровень создан во встроенном редакторе.',
+        room,
+        roomColor: 0x151b2e,
+        spawn: [spawnItem.x, spawnItem.y, spawnItem.z],
+        forward: [0, 0, -1],
+        obstacles,
+        platforms,
+        hazards,
+        checkpoints,
+        buttons,
+        doors,
+        exitMesh: {
+          pos: [exitItem.x, exitItem.y, exitItem.z],
+          size: [exitItem.sx, exitItem.sy, exitItem.sz],
+          color: 0x00ff88
+        },
+        exitZone: exitBox
+      };
+
+      if (doors.length === 1) {
+        level.exitLocked = true;
+        level.lockDoorId = doors[0].id;
+      }
+
+      if (doors.length > 1) {
+        level.requiredDoorIds = doors.map((d) => d.id);
+      }
+
+      return level;
+    }
+
+    async function copyLevelJSON() {
+      try {
+        const level = buildLevelJSON();
+        const text = JSON.stringify(level, null, 2);
+
+        try {
+          await navigator.clipboard.writeText(text);
+          showMessage('JSON скопирован');
+        } catch (e) {
+          window.prompt('Скопируй JSON вручную:', text);
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    function downloadLevelJSON() {
+      try {
+        const level = buildLevelJSON();
+        const text = JSON.stringify(level, null, 2);
+
+        const blob = new Blob([text], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'level.json';
+        a.click();
+
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // ---------- Игровой режим ----------
+    function makeVectorBox(item) {
+      const halfX = item.sx / 2;
+      const halfY = item.sy / 2;
+      const halfZ = item.sz / 2;
+
+      return {
+        min: new THREE.Vector3(item.x - halfX, item.y - halfY, item.z - halfZ),
+        max: new THREE.Vector3(item.x + halfX, item.y + halfY, item.z + halfZ)
+      };
+    }
+
+    function resetItemsVisuals() {
+      for (const item of items) {
+        if (item.type === 'button') {
+          item.mesh.material.color.set(COLORS.button);
+        }
+
+        if (item.type === 'door') {
+          item.mesh.visible = true;
+        }
+
+        if (item.type === 'platform') {
+          item.mesh.position.set(item.x, item.y, item.z);
+          item.mesh.scale.set(item.sx, item.sy, item.sz);
+          item.mesh.updateMatrixWorld(true);
+        }
+      }
+
+      if (selectedHelper && selected) {
+        selectedHelper.update();
+      }
+    }
+
+    function resetRuntimeMechanisms() {
+      if (!runtime) return;
+
+      for (const door of runtime.doors) {
+        door.open = false;
+        door.timer = 0;
+        door.item.mesh.visible = true;
+      }
+
+      for (const button of runtime.buttons) {
+        button.activated = false;
+        button.wasInside = false;
+        button.item.mesh.material.color.set(COLORS.button);
+      }
+    }
+
+    function buildRuntime() {
+      const spawnItem = items.find((i) => i.type === 'spawn');
+      const exitItem = items.find((i) => i.type === 'exit');
+
+      if (!spawnItem) throw new Error('Нужен хотя бы один спавн игрока.');
+      if (!exitItem) throw new Error('Нужен хотя бы один выход.');
+
+      const room = {
+        x: roomX(),
+        y: roomY(),
+        z: roomZ()
+      };
+
+      const obstacles = items
+        .filter((i) => i.type === 'obstacle')
+        .map((i) => makeVectorBox(i));
+
+      const hazards = items
+        .filter((i) => i.type === 'hazard')
+        .map((i) => makeVectorBox(i));
+
+      const checkpoints = items
+        .filter((i) => i.type === 'checkpoint')
+        .map((i) => ({
+          zone: makeVectorBox(i),
+          spawn: new THREE.Vector3(i.x, i.y, i.z)
+        }));
+
+      const doors = items
+        .filter((i) => i.type === 'door')
+        .map((item) => ({
+          item,
+          open: false,
+          timer: 0
+        }));
+
+      const buttons = items
+        .filter((i) => i.type === 'button')
+        .map((item, idx) => ({
+          item,
+          zone: makeVectorBox(item),
+          door: doors[idx] || null,
+          timed: item.timed || 0,
+          activated: false,
+          wasInside: false
+        }));
+
+      const platforms = items
+        .filter((i) => i.type === 'platform')
+        .map((item) => {
+          const p = {
+            item,
+            base: new THREE.Vector3(item.x, item.y, item.z),
+            axis: new THREE.Vector3(
+              item.axis === 'x' ? 1 : 0,
+              item.axis === 'y' ? 1 : 0,
+              item.axis === 'z' ? 1 : 0
+            ),
+            amp: item.amp || 0,
+            speed: item.speed || 1,
+            t: item.phase || 0,
+            delta: new THREE.Vector3(),
+            size: new THREE.Vector3(item.sx, item.sy, item.sz),
+            min: new THREE.Vector3(),
+            max: new THREE.Vector3()
+          };
+
+          updatePlatformBounds(p);
+          return p;
+        });
+
+      return {
+        room,
+        obstacles,
+        hazards,
+        checkpoints,
+        doors,
+        buttons,
+        platforms,
+        exitZone: makeVectorBox(exitItem),
+        spawn: new THREE.Vector3(spawnItem.x, spawnItem.y, spawnItem.z)
+      };
+    }
+
+    function startPlay() {
+      try {
+        runtime = buildRuntime();
+      } catch (err) {
+        alert(err.message);
+        exitToEdit();
+        return;
+      }
+
+      if (playTimeout) {
+        clearTimeout(playTimeout);
+        playTimeout = null;
+      }
+
+      won = false;
+      dead = false;
+
+      playerPos.copy(runtime.spawn);
+      playerVel.set(0, 0, 0);
+
+      logicGravity.set(0, -1, 0);
+      logicUp.set(0, 1, 0);
+      baseForward.set(0, 0, -1);
+      pitch = 0;
+
+      grounded = false;
+      groundedPlatform = null;
+      lastGroundPlatform = null;
+
+      currentCheckpoint.pos.copy(runtime.spawn);
+      currentCheckpoint.forward.set(0, 0, -1);
+      currentCheckpoint.gravity.set(0, -1, 0);
+
+      resetRuntimeMechanisms();
+
+      for (const p of runtime.platforms) {
+        p.t = p.item.phase || 0;
+        p.item.mesh.position.copy(p.base);
+        p.delta.set(0, 0, 0);
+        updatePlatformBounds(p);
+      }
+
+      updateCameraOrientation();
+      updateHud();
+    }
+
+    function enterPlay() {
+      mode = 'play';
+      layout();
+
+      controls.enabled = false;
+
+      if (selectedHelper) {
+        selectedHelper.visible = false;
+      }
+
+      startPlay();
+    }
+
+    function exitToEdit() {
+      if (playTimeout) {
+        clearTimeout(playTimeout);
+        playTimeout = null;
+      }
+
+      mode = 'edit';
+      pendingPlay = false;
+
+      layout();
+
+      controls.enabled = true;
+
+      resetItemsVisuals();
+
+      if (selectedHelper) {
+        selectedHelper.visible = true;
+        selectedHelper.update();
+      }
+
+      hudEl.innerHTML = '';
+    }
+
+    function respawn() {
+      if (!runtime) return;
+
+      dead = false;
+
+      playerPos.copy(currentCheckpoint.pos);
+      playerVel.set(0, 0, 0);
+
+      logicGravity.copy(currentCheckpoint.gravity);
+      logicUp.copy(logicGravity).multiplyScalar(-1);
+      baseForward.copy(currentCheckpoint.forward);
+      pitch = 0;
+
+      grounded = false;
+      groundedPlatform = null;
+      lastGroundPlatform = null;
+
+      resetRuntimeMechanisms();
+
+      updateCameraOrientation();
+      showMessage('Возрождение на чекпоинте');
+    }
+
+    function winLevel() {
+      if (won) return;
+
+      won = true;
+      showMessage('Уровень пройден!', 1600);
+
+      playTimeout = setTimeout(() => {
+        exitToEdit();
+      }, 1600);
+    }
+
+    function die() {
+      if (dead || won) return;
+
+      dead = true;
+      showMessage('Смерть', 900);
+
+      playTimeout = setTimeout(() => {
+        if (mode === 'play' && dead) {
+          respawn();
+        }
+      }, 900);
+    }
+
+    function updatePlatformBounds(p) {
+      p.min.set(
+        p.item.mesh.position.x - p.size.x / 2,
+        p.item.mesh.position.y - p.size.y / 2,
+        p.item.mesh.position.z - p.size.z / 2
+      );
+
+      p.max.set(
+        p.item.mesh.position.x + p.size.x / 2,
+        p.item.mesh.position.y + p.size.y / 2,
+        p.item.mesh.position.z + p.size.z / 2
+      );
+    }
+
+    function updatePlatforms(dt) {
+      for (const p of runtime.platforms) {
+        p.t += dt * p.speed;
+
+        const old = p.item.mesh.position.clone();
+        const offset = Math.sin(p.t) * p.amp;
+
+        p.item.mesh.position
+          .copy(p.base)
+          .add(p.axis.clone().multiplyScalar(offset));
+
+        p.delta.copy(p.item.mesh.position).sub(old);
+
+        updatePlatformBounds(p);
+      }
+    }
+
+    function getCameraForward() {
+      return new THREE.Vector3(0, 0, -1)
+        .applyQuaternion(camera.quaternion)
+        .normalize();
+    }
+
+    function updateCameraOrientation() {
+      const maxPitch = Math.PI / 2 - 0.22;
+      pitch = THREE.MathUtils.clamp(pitch, -maxPitch, maxPitch);
+
+      if (baseForward.lengthSq() < 1e-6) {
+        baseForward.set(0, 0, -1);
+      }
+
+      baseForward
+        .sub(logicUp.clone().multiplyScalar(baseForward.dot(logicUp)))
+        .normalize();
+
+      const viewDir = baseForward
+        .clone()
+        .multiplyScalar(Math.cos(pitch))
+        .add(logicUp.clone().multiplyScalar(Math.sin(pitch)))
+        .normalize();
+
+      const m = new THREE.Matrix4().lookAt(
+        new THREE.Vector3(0, 0, 0),
+        viewDir,
+        logicUp
+      );
+
+      camera.quaternion.setFromRotationMatrix(m);
+
+      camera.position.copy(playerPos).add(
+        logicUp.clone().multiplyScalar(eyeHeight)
+      );
+    }
+
+    function requestGravity(dir) {
+      if (mode !== 'play' || won || dead || !runtime) return;
+
+      if (logicGravity.distanceTo(dir) < 0.001) return;
+
+      const oldForward = getCameraForward();
+      const newUp = dir.clone().multiplyScalar(-1).normalize();
+
+      const maxPitch = Math.PI / 2 - 0.22;
+
+      const dot = THREE.MathUtils.clamp(oldForward.dot(newUp), -1, 1);
+      pitch = THREE.MathUtils.clamp(Math.asin(dot), -maxPitch, maxPitch);
+
+      baseForward = projectOnPlane(oldForward, newUp);
+
+      if (baseForward.lengthSq() < 1e-6) {
+        const helper =
+          Math.abs(newUp.y) < 0.9
+            ? new THREE.Vector3(0, 1, 0)
+            : new THREE.Vector3(1, 0, 0);
+
+        baseForward = projectOnPlane(helper, newUp);
+      }
+
+      baseForward.normalize();
+
+      logicGravity.copy(dir).normalize();
+      logicUp.copy(newUp);
+
+      updateCameraOrientation();
+    }
+
+    function resolvePlayBox(boxMin, boxMax, platform) {
+      const bMin = boxMin.clone().subScalar(radius);
+      const bMax = boxMax.clone().addScalar(radius);
+
+      if (
+        playerPos.x > bMin.x &&
+        playerPos.x < bMax.x &&
+        playerPos.y > bMin.y &&
+        playerPos.y < bMax.y &&
+        playerPos.z > bMin.z &&
+        playerPos.z < bMax.z
+      ) {
+        const dxMin = playerPos.x - bMin.x;
+        const dxMax = bMax.x - playerPos.x;
+        const dyMin = playerPos.y - bMin.y;
+        const dyMax = bMax.y - playerPos.y;
+        const dzMin = playerPos.z - bMin.z;
+        const dzMax = bMax.z - playerPos.z;
+
+        const pen = Math.min(dxMin, dxMax, dyMin, dyMax, dzMin, dzMax);
+
+        let normal = new THREE.Vector3();
+
+        if (pen === dxMin) {
+          playerPos.x = bMin.x;
+          if (playerVel.x < 0) playerVel.x = 0;
+          normal.set(-1, 0, 0);
+        } else if (pen === dxMax) {
+          playerPos.x = bMax.x;
+          if (playerVel.x > 0) playerVel.x = 0;
+          normal.set(1, 0, 0);
+        } else if (pen === dyMin) {
+          playerPos.y = bMin.y;
+          if (playerVel.y < 0) playerVel.y = 0;
+          normal.set(0, -1, 0);
+        } else if (pen === dyMax) {
+          playerPos.y = bMax.y;
+          if (playerVel.y > 0) playerVel.y = 0;
+          normal.set(0, 1, 0);
+        } else if (pen === dzMin) {
+          playerPos.z = bMin.z;
+          if (playerVel.z < 0) playerVel.z = 0;
+          normal.set(0, 0, -1);
+        } else if (pen === dzMax) {
+          playerPos.z = bMax.z;
+          if (playerVel.z > 0) playerVel.z = 0;
+          normal.set(0, 0, 1);
+        }
+
+        if (normal.dot(logicUp) > 0.82) {
+          grounded = true;
+          if (platform) groundedPlatform = platform;
+        }
+      }
+    }
+
+    function collidePlay() {
+      grounded = false;
+      groundedPlatform = null;
+
+      const room = runtime.room;
+
+      const min = new THREE.Vector3(
+        -room.x + radius,
+        -room.y + radius,
+        -room.z + radius
+      );
+
+      const max = new THREE.Vector3(
+        room.x - radius,
+        room.y - radius,
+        room.z - radius
+      );
+
+      if (playerPos.x < min.x) {
+        playerPos.x = min.x;
+        if (playerVel.x < 0) playerVel.x = 0;
+        if (logicUp.x > 0.82) grounded = true;
+      }
+
+      if (playerPos.x > max.x) {
+        playerPos.x = max.x;
+        if (playerVel.x > 0) playerVel.x = 0;
+        if (logicUp.x < -0.82) grounded = true;
+      }
+
+      if (playerPos.y < min.y) {
+        playerPos.y = min.y;
+        if (playerVel.y < 0) playerVel.y = 0;
+        if (logicUp.y > 0.82) grounded = true;
+      }
+
+      if (playerPos.y > max.y) {
+        playerPos.y = max.y;
+        if (playerVel.y > 0) playerVel.y = 0;
+        if (logicUp.y < -0.82) grounded = true;
+      }
+
+      if (playerPos.z < min.z) {
+        playerPos.z = min.z;
+        if (playerVel.z < 0) playerVel.z = 0;
+        if (logicUp.z > 0.82) grounded = true;
+      }
+
+      if (playerPos.z > max.z) {
+        playerPos.z = max.z;
+        if (playerVel.z > 0) playerVel.z = 0;
+        if (logicUp.z < -0.82) grounded = true;
+      }
+
+      for (const o of runtime.obstacles) {
+        resolvePlayBox(o.min, o.max, null);
+      }
+
+      for (const p of runtime.platforms) {
+        resolvePlayBox(p.min, p.max, p);
+      }
+    }
+
+    function checkHazards() {
+      const pad = 0.12;
+
+      for (const h of runtime.hazards) {
+        if (
+          playerPos.x > h.min.x - pad &&
+          playerPos.x < h.max.x + pad &&
+          playerPos.y > h.min.y - pad &&
+          playerPos.y < h.max.y + pad &&
+          playerPos.z > h.min.z - pad &&
+          playerPos.z < h.max.z + pad
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    function updateButtons() {
+      for (const b of runtime.buttons) {
+        const inside = insideBox(playerPos, b.zone);
+
+        if (inside && !b.wasInside) {
+          if (b.timed > 0) {
+            if (b.door) {
+              b.door.open = true;
+              b.door.timer = b.timed;
+              b.door.item.mesh.visible = false;
+            }
+
+            b.item.mesh.material.color.set(0x00ff88);
+            showMessage(`Дверь открыта на ${b.timed} сек`);
+          } else {
+            if (!b.activated) {
+              b.activated = true;
+
+              if (b.door) {
+                b.door.open = true;
+                b.door.item.mesh.visible = false;
+              }
+
+              b.item.mesh.material.color.set(0x00ff88);
+              showMessage('Кнопка активирована');
+            }
+          }
+        }
+
+        b.wasInside = inside;
+      }
+    }
+
+    function updateCheckpoints() {
+      for (const cp of runtime.checkpoints) {
+        if (insideBox(playerPos, cp.zone)) {
+          if (!currentCheckpoint.pos.equals(cp.spawn)) {
+            currentCheckpoint.pos.copy(cp.spawn);
+            currentCheckpoint.forward.set(0, 0, -1);
+            currentCheckpoint.gravity.set(0, -1, 0);
+            showMessage('Чекпоинт сохранён');
+          }
+        }
+      }
+    }
+
+    function updateDoorTimers(dt) {
+      for (const door of runtime.doors) {
+        if (door.timer > 0) {
+          door.timer -= dt;
+
+          if (door.timer <= 0) {
+            door.timer = 0;
+            door.open = false;
+            door.item.mesh.visible = true;
+
+            for (const b of runtime.buttons) {
+              if (b.door === door && b.timed > 0) {
+                b.item.mesh.material.color.set(COLORS.button);
+              }
+            }
+
+            showMessage('Дверь закрыта');
+          }
+        }
+      }
+    }
+
+    function isExitLocked() {
+      if (!runtime) return true;
+
+      if (runtime.doors.length === 0) return false;
+
+      return runtime.doors.some((d) => !d.open);
+    }
+
+    function updateHud() {
+      if (!runtime) return;
+
+      const doorText = runtime.doors.length === 0
+        ? 'Выход открыт'
+        : (isExitLocked() ? 'Двери закрыты' : 'Двери открыты');
+
+      hudEl.innerHTML = `
+        <b>Тест уровня</b><br>
+        Гравитация: ${gravityNameFor(logicGravity)}<br>
+        ${doorText}<br>
+        <small>1-6 — гравитация, R — рестарт, Esc — редактор</small>
+      `;
+    }
+
+    function updatePlay(dt) {
+      if (!runtime || won || dead) return;
+
+      updatePlatforms(dt);
+
+      if (lastGroundPlatform) {
+        playerPos.add(lastGroundPlatform.delta);
+      }
+
+      let ix = 0;
+      let iy = 0;
+
+      ix = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+      iy = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+
+      const input = new THREE.Vector2(ix, iy);
+      if (input.lengthSq() > 1) input.normalize();
+
+      const right = baseForward.clone().cross(logicUp).normalize();
+
+      const wish = baseForward
+        .clone()
+        .multiplyScalar(input.y)
+        .add(right.multiplyScalar(input.x));
+
+      const oldVertical = playerVel.clone().projectOnVector(logicGravity);
+
+      playerVel.copy(wish.multiplyScalar(speed)).add(oldVertical);
+
+      if (keys.has('Space') && grounded) {
+        playerVel.add(logicUp.clone().multiplyScalar(jumpSpeed));
+        grounded = false;
+      }
+
+      playerVel.add(
+        logicGravity.clone().multiplyScalar(gravityStrength * dt)
+      );
+
+      playerPos.add(playerVel.clone().multiplyScalar(dt));
+
+      collidePlay();
+
+      if (checkHazards()) {
+        die();
+        return;
+      }
+
+      updateButtons();
+      updateCheckpoints();
+      updateDoorTimers(dt);
+
+      if (!won && insideBox(playerPos, runtime.exitZone)) {
+        if (!isExitLocked()) {
+          winLevel();
+        }
+      }
+
+      lastGroundPlatform = groundedPlatform;
+
+      updateCameraOrientation();
+      updateHud();
+    }
+
+    // ---------- События ----------
+    document.getElementById('btn-play').addEventListener('click', () => {
+      pendingPlay = true;
+      renderer.domElement.requestPointerLock();
+    });
+
+    document.getElementById('btn-room-apply').addEventListener('click', () => {
+      rebuildRoomVisual();
+      showMessage('Комната обновлена');
+    });
+
+    document.getElementById('btn-add').addEventListener('click', () => {
+      const type = document.getElementById('add-type').value;
+      addItem(type);
+    });
+
+    document.getElementById('btn-delete').addEventListener('click', () => {
+      deleteSelected();
+    });
+
+    document.getElementById('btn-duplicate').addEventListener('click', () => {
+      duplicateSelected();
+    });
+
+    document.getElementById('object-list').addEventListener('change', (e) => {
+      const id = Number(e.target.value);
+      const item = items.find((i) => i.id === id);
+      if (item) selectItem(item);
+    });
+
+    document.getElementById('btn-save').addEventListener('click', () => {
+      saveProject();
+    });
+
+    document.getElementById('btn-load').addEventListener('click', () => {
+      loadProject();
+    });
+
+    document.getElementById('btn-copy-json').addEventListener('click', () => {
+      copyLevelJSON();
+    });
+
+    document.getElementById('btn-download-json').addEventListener('click', () => {
+      downloadLevelJSON();
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      if (!confirm('Очистить уровень и создать базовый спавн + выход?')) return;
+
+      clearItems();
+      addItem('spawn');
+      addItem('exit');
+      showMessage('Уровень очищен');
+    });
+
+    addEventListener('keydown', (e) => {
+      if (mode !== 'play') return;
+
+      if (e.code === 'Space') e.preventDefault();
+
+      keys.add(e.code);
+
+      if (e.code === 'KeyR') {
+        startPlay();
+        return;
+      }
+
+      if (won || dead) return;
+
+      if (gravityKeys[e.code]) {
+        requestGravity(gravityKeys[e.code]);
+      }
+    });
+
+    addEventListener('keyup', (e) => {
+      keys.delete(e.code);
+    });
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      pointerDownPos.x = e.clientX;
+      pointerDownPos.y = e.clientY;
+    });
+
+    renderer.domElement.addEventListener('pointerup', (e) => {
+      if (mode !== 'edit') return;
+
+      const dx = e.clientX - pointerDownPos.x;
+      const dy = e.clientY - pointerDownPos.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < 6) {
+        pickAt(e.clientX, e.clientY);
+      }
+    });
+
+    addEventListener('mousemove', (e) => {
+      if (
+        mode !== 'play' ||
+        document.pointerLockElement !== renderer.domElement ||
+        won ||
+        dead
+      ) {
+        return;
+      }
+
+      const sens = 0.0021;
+
+      baseForward.applyAxisAngle(logicUp, -e.movementX * sens);
+
+      baseForward
+        .sub(logicUp.clone().multiplyScalar(baseForward.dot(logicUp)))
+        .normalize();
+
+      pitch -= e.movementY * sens;
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      const locked = document.pointerLockElement === renderer.domElement;
+
+      if (locked && pendingPlay) {
+        pendingPlay = false;
+        enterPlay();
+      } else if (!locked && mode === 'play') {
+        exitToEdit();
+      }
+    });
+
+    addEventListener('resize', () => {
+      layout();
+    });
+
+    // ---------- Запуск ----------
+    function createDefaultScene() {
+      addItem('spawn');
+      addItem('exit');
+      addItem('hazard');
+      addItem('platform');
+      addItem('checkpoint');
+    }
+
+    rebuildRoomVisual();
+
+    try {
+      const raw = localStorage.getItem(PROJECT_KEY);
+      if (raw) {
+        loadProject();
+      } else {
+        createDefaultScene();
+      }
+    } catch (e) {
+      createDefaultScene();
+    }
+
+    layout();
+    refreshList();
+    renderProps();
+
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(0.033, clock.getDelta());
+
+      if (mode === 'edit') {
+        controls.update();
+
+        if (selectedHelper && selected) {
+          selectedHelper.update();
+        }
+      } else {
+        updatePlay(dt);
+      }
+
+      renderer.render(scene, camera);
+    });
+
+    const clock = new THREE.Clock();
+  </script>
+</body>
+</html>
